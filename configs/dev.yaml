@@ -1,0 +1,46 @@
+# Development Configuration
+# TODO: Replace with your actual development values
+
+# Database Configuration
+db:
+  url: "postgresql+asyncpg://gfp_user:gfp_password@localhost:5432/dev_db"
+  pool_size: 5
+  max_overflow: 10
+  pool_pre_ping: true
+  echo: true  # Enable SQL logging for development
+
+# Redis Configuration
+redis:
+  url: "redis://localhost:6379/0"
+  pool_size: 5
+  decode_responses: true
+
+# Authentication
+auth:
+  secret_key: "dev_secret_key_change_in_production_32_chars_min"
+  algorithm: "HS256"
+  access_token_expire_minutes: 60
+  refresh_token_expire_days: 30
+
+# Application Settings
+app:
+  title: "GFP CoreX Development"
+  version: "1.0.0"
+  debug: true
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "http://127.0.0.1:3000"
+
+# Logging
+logging:
+  level: "DEBUG"
+  format: "text"
+  handlers:
+    - console
+
+# Security
+security:
+  bcrypt_rounds: 4  # Faster for development
+  rate_limit_per_minute: 1000
+  max_request_size: "10MB" 
