@@ -3,44 +3,40 @@
 
 # Database Configuration
 db:
-  url: "postgresql+asyncpg://gfp_user:gfp_password@localhost:5432/dev_db"
-  pool_size: 5
-  max_overflow: 10
+  url: "mysql+aiomysql://gfp_user:gfp_password@127.0.0.1:3307/gfp_dev_db"
+  pool_size: 10
+  max_overflow: 20
   pool_pre_ping: true
-  echo: true  # Enable SQL logging for development
+  echo: false
 
 # Redis Configuration
 redis:
-  url: "redis://localhost:6379/0"
-  pool_size: 5
+  url: "redis://127.0.0.1:6379/0"
+  pool_size: 10
   decode_responses: true
 
 # Authentication
 auth:
-  secret_key: "dev_secret_key_change_in_production_32_chars_min"
+  secret_key: "your-secret-key-here-make-it-long-and-secure-32-chars-min"
   algorithm: "HS256"
-  access_token_expire_minutes: 60
-  refresh_token_expire_days: 30
+  access_token_expire_minutes: 30
+  refresh_token_expire_days: 7
 
 # Application Settings
 app:
-  title: "GFP CoreX Development"
+  title: "GFP CoreX Dev"
   version: "1.0.0"
   debug: true
-  cors_origins:
-    - "http://localhost:3000"
-    - "http://localhost:8080"
-    - "http://127.0.0.1:3000"
+  cors_origins: ["http://localhost:3000", "http://localhost:8080"]
 
 # Logging
 logging:
   level: "DEBUG"
   format: "text"
-  handlers:
-    - console
+  handlers: ["console"]
 
 # Security
 security:
-  bcrypt_rounds: 4  # Faster for development
-  rate_limit_per_minute: 1000
+  bcrypt_rounds: 12
+  rate_limit_per_minute: 100
   max_request_size: "10MB" 

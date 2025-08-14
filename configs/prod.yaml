@@ -3,21 +3,21 @@
 
 # Database Configuration
 db:
-  url: "postgresql+asyncpg://user:pass@postgres:5432/prod_db"
+  url: "mysql+aiomysql://gfp_user:gfp_password@127.0.0.1:3307/gfp_prod_db"
   pool_size: 20
   max_overflow: 30
   pool_pre_ping: true
-  echo: false
+  echo: false  # Disable SQL logging for production
 
 # Redis Configuration
 redis:
-  url: "redis://redis:6379/1"
-  pool_size: 10
+  url: "redis://127.0.0.1:6379/1"
+  pool_size: 20
   decode_responses: true
 
 # Authentication
 auth:
-  secret_key: "ENCRYPTED_KEY_HERE_CHANGE_IN_PRODUCTION_32_CHARS_MIN"
+  secret_key: "your-secret-key-here-make-it-long-and-secure-32-chars-min"
   algorithm: "HS256"
   access_token_expire_minutes: 30
   refresh_token_expire_days: 7
@@ -27,20 +27,16 @@ app:
   title: "GFP CoreX Production"
   version: "1.0.0"
   debug: false
-  cors_origins:
-    - "https://yourdomain.com"
-    - "https://api.yourdomain.com"
+  cors_origins: ["https://yourdomain.com", "https://api.yourdomain.com"]
 
 # Logging
 logging:
   level: "INFO"
   format: "json"
-  handlers:
-    - console
-    - file
+  handlers: ["console", "file"]
 
 # Security
 security:
-  bcrypt_rounds: 12
+  bcrypt_rounds: 12  # Secure for production
   rate_limit_per_minute: 100
   max_request_size: "10MB" 

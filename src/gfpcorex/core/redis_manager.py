@@ -1,16 +1,33 @@
 """
 Redis management for multi-configuration FastAPI backend.
 Supports isolated Redis connections for different configurations.
+
+Usage Examples:
+    
+    # Option 1: Get Redis client directly
+    redis_client = await get_redis_client("dev", config)
+    await redis_client.set("key", "value")
+    value = await redis_client.get("key")
+    
+    # Option 2: Use Redis manager directly
+    redis_client = redis_manager.get_redis_client("dev", config)
+    await redis_client.set("key", "value")
+    value = await redis_client.get("key")
+    
+    # Note: Redis clients are shared and managed automatically.
+    # No need to close them manually.
 """
 
 import asyncio
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Dict, Optional
+from typing import Dict, Optional
 
 import redis.asyncio as redis
 from redis.asyncio import ConnectionPool, Redis
 
 from .config import Config
+from ..utils.logging import GFPConsoleMessageStylizer
+
+ConsoleMessageStylizer = GFPConsoleMessageStylizer("redis", "#cc0066")
 
 
 class RedisManager:
@@ -61,8 +78,7 @@ class RedisManager:
         
         return self._clients[config_name]
     
-    @asynccontextmanager
-    async def get_redis(self, config_name: str, config: Config) -> AsyncGenerator[Redis, None]:
+    def get_redis_client(self, config_name: str, config: Config) -> Redis:
         """
         Get Redis client for configuration.
         
@@ -70,15 +86,14 @@ class RedisManager:
             config_name: Name of the configuration
             config: Configuration object
             
-        Yields:
+        Returns:
             Redis client instance
+            
+        Note:
+            This method returns a Redis client that is shared across the application.
+            No need to close it manually as it's managed by the RedisManager.
         """
-        client = self.get_client(config_name, config)
-        try:
-            yield client
-        finally:
-            # Don't close the client as it's shared
-            pass
+        return self.get_client(config_name, config)
     
     async def ping(self, config_name: str, config: Config) -> bool:
         """
@@ -112,7 +127,7 @@ class RedisManager:
 redis_manager = RedisManager()
 
 
-async def get_redis_client(config_name: str, config: Config) -> AsyncGenerator[Redis, None]:
+async def get_redis_client(config_name: str, config: Config) -> Redis:
     """
     Dependency for getting Redis client.
     
@@ -120,27 +135,44 @@ async def get_redis_client(config_name: str, config: Config) -> AsyncGenerator[R
         config_name: Name of the configuration
         config: Configuration object
         
-    Yields:
+    Returns:
         Redis client instance
+        
+    Note:
+        This function returns a Redis client that is shared across the application.
+        No need to close it manually as it's managed by the RedisManager.
     """
-    async with redis_manager.get_redis(config_name, config) as client:
-        yield client
+    return redis_manager.get_redis_client(config_name, config)
 
 
-async def init_redis(config_name: str, config: Config) -> None:
+async def init_redis(config_name: str, config: Config) -> dict:
     """
     Initialize Redis connection for configuration.
     
     Args:
         config_name: Name of the configuration
         config: Configuration object
+        
+    Returns:
+        dict: {"status": "success"|"warning"|"error", "message": str}
     """
     try:
         is_connected = await redis_manager.ping(config_name, config)
         if not is_connected:
-            print(f"Warning: Failed to connect to Redis for {config_name}")
+            return {
+                "status": "warning",
+                "message": f"Failed to connect to Redis for {config_name}"
+            }
+        else:
+            return {
+                "status": "success",
+                "message": f"Redis connection successful for {config_name}"
+            }
     except Exception as e:
-        print(f"Warning: Redis connection failed for {config_name}: {e}")
+        return {
+            "status": "error",
+            "message": f"Redis connection failed for {config_name}: {e}"
+        }
 
 
 async def close_redis() -> None:

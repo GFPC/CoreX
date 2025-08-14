@@ -1,366 +1,459 @@
-# GFP CoreX - Multi-Configuration FastAPI Backend
+# GFP CoreX - Мультитенантная система с плагинами
 
-Production-ready мультиконфигурационный FastAPI-бэкенд с Docker поддержкой.
+GFP CoreX - это мультитенантная FastAPI система с изолированными базами данных, Redis и системой плагинов для каждой конфигурации.
 
-## 🚀 Особенности
+## 🚀 Основные возможности
 
-- **Мультиконфигурационная архитектура**: Изолированные конфигурации с разными БД/Redis
-- **URL-шаблон**: `http://gfp.com/api/c/{config_name}/api/v1/...`
-- **Динамическая загрузка**: Конфигурации загружаются из YAML файлов
-- **Docker-ready**: Полная поддержка Docker и Docker Compose
-- **Production-ready**: Готов к развертыванию в продакшене
+### Мультитенантная архитектура
+- **Изолированные конфигурации**: Каждая конфигурация (`dev`, `prod`) имеет свою базу данных и Redis
+- **Универсальные API пути**: Все API доступны через `/api/c/{config_name}/api/v1/`
+- **Изолированные плагины**: Плагины загружаются и работают независимо для каждой конфигурации
 
-## 📁 Структура проекта
+### Система плагинов
+- **Горячая перезагрузка**: Плагины перезагружаются автоматически при изменении кода
+- **Изоляция по конфигурациям**: Плагины доступны только в своей конфигурации
+- **Безопасное выполнение**: Плагины выполняются в изолированной среде
+- **API интеграция**: Плагины можно вызывать из других API эндпоинтов
+
+## 📋 Структура проекта
 
 ```
 GFP CoreX/
-├── configs/                 # Конфигурационные файлы
-│   ├── prod.yaml           # Production конфигурация
-│   ├── dev.yaml            # Development конфигурация
-│   └── test.yaml           # Test конфигурация
 ├── src/gfpcorex/
-│   ├── core/               # Основные модули
-│   │   ├── config.py       # Система конфигураций
-│   │   ├── database.py     # Управление БД
-│   │   └── redis.py        # Управление Redis
 │   ├── api/
-│   │   └── dynamic/        # Динамические роутеры
-│   │       └── router.py   # Основной роутер
-│   └── main.py             # Главное приложение
-├── docker/
-├── scripts/                # Скрипты развертывания
-├── Dockerfile              # Docker образ
-├── docker-compose.yml      # Docker Compose
-└── pyproject.toml         # Зависимости
+│   │   ├── plugins.py              # API управления плагинами
+│   │   └── plugin_integration.py   # API интеграции плагинов
+│   ├── plugins/
+│   │   ├── manager.py              # Менеджер плагинов
+│   │   └── api.py                  # API для плагинов
+│   ├── models/
+│   │   ├── plugin.py               # Модель плагина
+│   │   ├── user.py                 # Модель пользователя
+│   │   └── user_role.py            # Модель роли пользователя
+│   └── core/
+│       ├── database.py             # Управление БД
+│       └── config.py               # Конфигурации
+├── configs/
+│   ├── dev.yaml                   # Конфигурация dev
+│   └── prod.yaml                  # Конфигурация prod
+└── scripts/
+    ├── create_calculator_plugin.py # Создание плагина-калькулятора
+    ├── call_plugin_with_params.py  # Тест вызова плагина
+    └── test_multi_config_plugins.py # Тест мультиконфигурации
 ```
 
-## 🛠 Установка и запуск
+## 🔧 Установка и запуск
 
-### Локальная разработка
+### Требования
+- Python 3.10+
+- MySQL/PostgreSQL
+- Redis (опционально)
 
-1. **Клонируйте репозиторий**:
+### Установка
 ```bash
+# Клонирование репозитория
 git clone <repository-url>
-cd gfp-corex
-```
+cd "GFP CoreX"
 
-2. **Установите зависимости**:
-```bash
+# Установка зависимостей
 poetry install
+
+# Активация виртуального окружения
+poetry shell
 ```
 
-3. **Настройте базу данных**:
+### Запуск
 ```bash
-# Запустите PostgreSQL и Redis локально
-# Или используйте Docker Compose
-docker-compose up -d postgres redis
+# Запуск сервера
+python -m src.gfpcorex.main
 ```
 
-4. **Запустите приложение**:
+Сервер будет доступен по адресу: http://localhost:8000
+
+## 📚 API документация
+
+### Основные эндпоинты
+
+#### Глобальные (без конфигурации)
+- `GET /` - Информация о API
+- `GET /health` - Проверка здоровья системы
+- `GET /docs` - Swagger документация
+
+#### Конфигурационные (с конфигурацией)
+- `GET /api/c/{config_name}/api/v1/health` - Проверка конфигурации
+- `GET /api/c/{config_name}/api/v1/example` - Пример эндпоинта
+
+### API плагинов
+
+#### Управление плагинами
 ```bash
-poetry run python -m src.gfpcorex.main
+# Список плагинов
+GET /api/c/{config_name}/api/v1/plugins
+
+# Информация о плагине
+GET /api/c/{config_name}/api/v1/plugins/{plugin_name}
+
+# Создание плагина
+POST /api/c/{config_name}/api/v1/plugins
+{
+    "name": "my_plugin",
+    "code": "def hello(): return 'Hello, World!'"
+}
+
+# Обновление плагина
+PUT /api/c/{config_name}/api/v1/plugins/{plugin_name}
+{
+    "code": "def hello(): return 'Updated Hello!'",
+    "is_active": true
+}
+
+# Выполнение функции плагина
+POST /api/c/{config_name}/api/v1/plugins/{plugin_name}/execute
+{
+    "function_name": "hello",
+    "args": [],
+    "kwargs": {}
+}
+
+# Перезагрузка плагина
+POST /api/c/{config_name}/api/v1/plugins/{plugin_name}/reload
+
+# Удаление плагина
+DELETE /api/c/{config_name}/api/v1/plugins/{plugin_name}
 ```
 
-### Docker развертывание
-
-1. **Запустите все сервисы**:
+#### Интеграционные API
 ```bash
-docker-compose up -d
+# Калькулятор
+POST /api/c/{config_name}/api/v1/plugin-integration/calculate
+{
+    "plugin_name": "calculator",
+    "function_name": "calculate",
+    "params": {"operation": "add", "a": 10, "b": 5}
+}
+
+# Приветствие
+POST /api/c/{config_name}/api/v1/plugin-integration/greet
+{
+    "plugin_name": "calculator",
+    "function_name": "greet",
+    "params": {"name": "Иван", "age": 25}
+}
+
+# Универсальный API
+POST /api/c/{config_name}/api/v1/plugin-integration/custom
+{
+    "plugin_name": "my_plugin",
+    "function_name": "my_function",
+    "params": {"param1": "value1"}
+}
 ```
 
-2. **Проверьте статус**:
-```bash
-docker-compose ps
+## 🔌 Система плагинов
+
+### Создание плагина
+
+Плагины - это Python код, который выполняется в изолированной среде. Каждый плагин может содержать несколько функций.
+
+#### Пример плагина-калькулятора:
+```python
+def calculate(operation, a, b):
+    """Калькулятор с параметрами"""
+    try:
+        if operation == 'add':
+            result = a + b
+        elif operation == 'subtract':
+            result = a - b
+        elif operation == 'multiply':
+            result = a * b
+        elif operation == 'divide':
+            if b == 0:
+                return {"error": "Деление на ноль невозможно"}
+            result = a / b
+        else:
+            return {"error": f"Неизвестная операция: {operation}"}
+        
+        return {
+            "operation": operation,
+            "a": a,
+            "b": b,
+            "result": result,
+            "success": True
+        }
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+def greet(name, age=None):
+    """Приветствие с параметрами"""
+    if age:
+        return {
+            "message": f"Привет, {name}! Тебе {age} лет.",
+            "name": name,
+            "age": age
+        }
+    else:
+        return {
+            "message": f"Привет, {name}!",
+            "name": name
+        }
 ```
 
-3. **Просмотрите логи**:
-```bash
-docker-compose logs -f app
+### Изоляция плагинов
+
+Плагины полностью изолированы по конфигурациям:
+
+- **DEV конфигурация**: Плагины доступны только в `/api/c/dev/api/v1/plugins/`
+- **PROD конфигурация**: Плагины доступны только в `/api/c/prod/api/v1/plugins/`
+
+Плагины из одной конфигурации недоступны в другой.
+
+### Безопасность
+
+- Плагины выполняются в изолированной среде
+- Ограниченный доступ к системным ресурсам
+- Валидация входных данных
+- Обработка ошибок выполнения
+
+## 🗄️ База данных
+
+### Модели
+
+#### User (Пользователи)
+```sql
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    role_id INT DEFAULT 2,
+    bio TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (role_id) REFERENCES user_roles(id)
+);
 ```
 
-## 🔧 Конфигурация
+#### UserRole (Роли пользователей)
+```sql
+CREATE TABLE user_roles (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
 
-### Структура конфигурационного файла
+#### Plugin (Плагины)
+```sql
+CREATE TABLE plugins (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    code TEXT NOT NULL,
+    hashsum VARCHAR(64) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
 
+#### AuthSession (Сессии аутентификации)
+```sql
+CREATE TABLE auth_sessions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    session_token VARCHAR(255) UNIQUE NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+```
+
+### Автоматическое создание таблиц
+
+Система автоматически создает таблицы при первом запуске:
+
+1. Проверяет существование таблиц
+2. Создает недостающие таблицы из моделей SQLAlchemy
+3. Вставляет данные по умолчанию (роли пользователей)
+
+## 🔧 Конфигурации
+
+### Структура конфигурации
 ```yaml
-# configs/prod.yaml
+# configs/dev.yaml
+app:
+  title: "GFP CoreX Dev"
+  version: "1.0.0"
+
 db:
-  url: "postgresql+asyncpg://user:pass@postgres:5432/prod_db"
-  pool_size: 20
-  max_overflow: 30
+  url: "mysql+aiomysql://user:password@localhost/gfpcorex_dev"
+  echo: true
 
 redis:
-  url: "redis://redis:6379/1"
-  pool_size: 10
-
-auth:
-  secret_key: "ENCRYPTED_KEY"
-  algorithm: "HS256"
-
-app:
-  title: "GFP CoreX Production"
-  debug: false
+  url: "redis://localhost:6379/0"
 ```
 
-### Добавление новой конфигурации
-
-1. Создайте новый файл в `configs/`:
-```bash
-cp configs/dev.yaml configs/my-config.yaml
-```
-
-2. Отредактируйте настройки в `configs/my-config.yaml`
-
-3. Перезапустите приложение
-
-## 🌐 API Endpoints
-
-### Основные endpoints
-
-- `GET /` - Информация о приложении
-- `GET /health` - Глобальная проверка здоровья
-- `GET /docs` - Swagger документация
-- `GET /redoc` - ReDoc документация
-
-### Конфигурационные endpoints
-
-Для каждой конфигурации доступны:
-
-- `GET /api/c/{config_name}/api/v1/health` - Проверка здоровья конфигурации
-- `GET /api/c/{config_name}/api/v1/example` - Пример endpoint
-
-### Примеры запросов
-
-```bash
-# Получить информацию о приложении
-curl http://localhost:8000/
-
-# Проверить здоровье production конфигурации
-curl http://localhost:8000/api/c/prod/api/v1/health
-
-# Получить пример данных из development конфигурации
-curl http://localhost:8000/api/c/dev/api/v1/example
-```
-
-## 🔐 Безопасность
-
-### TODO: Настройки безопасности
-
-1. **Секретные ключи**: Замените `ENCRYPTED_KEY` на реальные секреты
-2. **CORS**: Настройте разрешенные домены в конфигурациях
-3. **Rate Limiting**: Настройте лимиты запросов
-4. **SSL/TLS**: Настройте HTTPS в продакшене
-
-### Переменные окружения
-
-```bash
-# Production
-export GFP_SECRET_KEY="your-super-secret-key"
-export GFP_DB_URL="postgresql+asyncpg://user:pass@host:5432/db"
-export GFP_REDIS_URL="redis://host:6379/1"
-```
-
-## 📊 Мониторинг
-
-### Health Checks
-
-- `GET /health` - Глобальная проверка
-- `GET /api/c/{config}/api/v1/health` - Проверка конфигурации
-
-### Логирование
-
-Настройте логирование в конфигурациях:
-
-```yaml
-logging:
-  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
-  format: "json"  # text, json
-  handlers: ["console", "file"]
-```
-
-## 🐳 Docker
-
-### Сборка образа
-
-```bash
-docker build -t gfp-corex .
-```
-
-### Запуск с Docker Compose
-
-```bash
-# Разработка
-docker-compose up
-
-# Продакшен (с Nginx)
-docker-compose --profile production up -d
-```
-
-### Переменные окружения в Docker
-
-```yaml
-# docker-compose.yml
-environment:
-  - GFP_SECRET_KEY=${GFP_SECRET_KEY}
-  - GFP_DB_URL=${GFP_DB_URL}
-  - GFP_REDIS_URL=${GFP_REDIS_URL}
-```
+### Доступные конфигурации
+- `dev` - Конфигурация для разработки
+- `prod` - Конфигурация для продакшена
 
 ## 🧪 Тестирование
 
-### Запуск тестов
+### Тестовые скрипты
 
 ```bash
-# Установите dev зависимости
-poetry install --with dev
+# Создание плагина-калькулятора
+python scripts/create_calculator_plugin.py
 
-# Запустите тесты
-poetry run pytest
+# Тест вызова плагина с параметрами
+python scripts/call_plugin_with_params.py
 
-# С покрытием
-poetry run pytest --cov=src
+# Тест интеграционного API
+python scripts/test_plugin_integration.py
+
+# Тест мультиконфигурационных плагинов
+python scripts/test_multi_config_plugins.py
 ```
 
-### Тестовые конфигурации
-
-Используйте `configs/test.yaml` для тестирования:
+### Примеры curl
 
 ```bash
-# Запустите тестовую конфигурацию
-curl http://localhost:8000/api/c/test/api/v1/health
+# Создание плагина
+curl -X POST "http://localhost:8000/api/c/dev/api/v1/plugins" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "test", "code": "def hello(): return \"Hello\""}'
+
+# Выполнение функции плагина
+curl -X POST "http://localhost:8000/api/c/dev/api/v1/plugins/test/execute" \
+  -H "Content-Type: application/json" \
+  -d '{"function_name": "hello", "args": [], "kwargs": {}}'
+
+# Интеграционный API
+curl -X POST "http://localhost:8000/api/c/dev/api/v1/plugin-integration/custom" \
+  -H "Content-Type: application/json" \
+  -d '{"plugin_name": "calculator", "function_name": "calculate", "params": {"operation": "add", "a": 10, "b": 5}}'
 ```
 
-## 📈 Производительность
+## 📖 Примеры использования
 
-### Настройки пулов соединений
+### 1. Создание плагина через API
 
-```yaml
-db:
-  pool_size: 20        # Размер пула БД
-  max_overflow: 30     # Максимальное переполнение
+```python
+import requests
 
-redis:
-  pool_size: 10        # Размер пула Redis
+# Создание плагина
+plugin_code = '''
+def calculate(operation, a, b):
+    if operation == 'add':
+        return a + b
+    elif operation == 'multiply':
+        return a * b
+    else:
+        return None
+'''
+
+response = requests.post(
+    "http://localhost:8000/api/c/dev/api/v1/plugins",
+    json={
+        "name": "calculator",
+        "code": plugin_code
+    }
+)
+
+print(response.json())
 ```
 
-### Мониторинг производительности
+### 2. Вызов плагина
 
-- Используйте `echo: true` в development для логирования SQL
-- Настройте метрики в продакшене
-- Мониторьте использование памяти и CPU
+```python
+import requests
 
-## 🔄 Развертывание
+# Вызов функции плагина
+response = requests.post(
+    "http://localhost:8000/api/c/dev/api/v1/plugins/calculator/execute",
+    json={
+        "function_name": "calculate",
+        "args": [],
+        "kwargs": {
+            "operation": "add",
+            "a": 10,
+            "b": 5
+        }
+    }
+)
 
-### Production развертывание
+result = response.json()
+print(f"Результат: {result['result']}")
+```
 
-1. **Подготовьте сервер**:
+### 3. Интеграция в другие API
+
+```python
+import requests
+
+# Вызов через интеграционный API
+response = requests.post(
+    "http://localhost:8000/api/c/dev/api/v1/plugin-integration/custom",
+    json={
+        "plugin_name": "calculator",
+        "function_name": "calculate",
+        "params": {
+            "operation": "multiply",
+            "a": 7,
+            "b": 8
+        }
+    }
+)
+
+result = response.json()
+print(f"Результат: {result['result']}")
+```
+
+## 🔒 Безопасность
+
+### Аутентификация и авторизация
+- JWT токены для аутентификации
+- Роли пользователей (admin, user)
+- Сессии с автоматическим истечением
+
+### Изоляция данных
+- Каждая конфигурация имеет свою базу данных
+- Плагины изолированы по конфигурациям
+- Безопасное выполнение кода плагинов
+
+## 🚀 Развертывание
+
+### Docker Compose
 ```bash
-# Установите Docker и Docker Compose
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
+# Запуск всех сервисов
+docker-compose up -d
+
+# Просмотр логов
+docker-compose logs -f
 ```
 
-2. **Настройте переменные окружения**:
+### Продакшен
 ```bash
-export GFP_SECRET_KEY="your-production-secret"
-export GFP_DB_URL="postgresql+asyncpg://prod_user:prod_pass@prod_host:5432/prod_db"
-export GFP_REDIS_URL="redis://prod_redis:6379/1"
+# Использование продакшен конфигурации
+export CONFIG_NAME=prod
+python -m src.gfpcorex.main
 ```
 
-3. **Запустите приложение**:
-```bash
-docker-compose --profile production up -d
-```
+## 📝 Лицензия
 
-### CI/CD Pipeline
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Deploy to production
-        run: |
-          docker-compose --profile production up -d
-```
-
-## 🐛 Troubleshooting
-
-### Частые проблемы
-
-1. **Ошибка подключения к БД**:
-   - Проверьте настройки в конфигурации
-   - Убедитесь, что PostgreSQL запущен
-   - Проверьте права доступа пользователя
-
-2. **Ошибка подключения к Redis**:
-   - Проверьте настройки Redis
-   - Убедитесь, что Redis запущен
-   - Проверьте доступность порта
-
-3. **Конфигурация не найдена**:
-   - Проверьте наличие файла в `configs/`
-   - Убедитесь в правильности YAML синтаксиса
-   - Проверьте логи приложения
-
-### Логи
-
-```bash
-# Просмотр логов приложения
-docker-compose logs -f app
-
-# Просмотр логов БД
-docker-compose logs -f postgres
-
-# Просмотр логов Redis
-docker-compose logs -f redis
-```
-
-## 📝 TODO
-
-### Кастомные настройки
-
-- [ ] Настройте реальные секретные ключи
-- [ ] Настройте CORS для ваших доменов
-- [ ] Добавьте аутентификацию и авторизацию
-- [ ] Настройте rate limiting
-- [ ] Добавьте метрики и мониторинг
-- [ ] Настройте SSL/TLS сертификаты
-- [ ] Добавьте backup стратегию для БД
-- [ ] Настройте логирование в файлы
-- [ ] Добавьте алерты и уведомления
-
-### Дополнительные функции
-
-- [ ] Добавьте GraphQL поддержку
-- [ ] Реализуйте WebSocket endpoints
-- [ ] Добавьте поддержку Webhooks
-- [ ] Реализуйте кэширование на уровне приложения
-- [ ] Добавьте поддержку очередей задач
-- [ ] Реализуйте API версионирование
-
-## 📄 Лицензия
-
-MIT License - см. файл LICENSE для деталей.
+MIT License
 
 ## 🤝 Вклад в проект
 
-1. Fork репозиторий
-2. Создайте feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit изменения (`git commit -m 'Add amazing feature'`)
-4. Push в branch (`git push origin feature/amazing-feature`)
-5. Откройте Pull Request
+1. Fork репозитория
+2. Создайте feature branch
+3. Внесите изменения
+4. Добавьте тесты
+5. Создайте Pull Request
 
 ## 📞 Поддержка
 
-- Создайте Issue в GitHub
-- Напишите на email: fealx15@gmail.com
-- Документация: `/docs` endpoint в приложении
+Для вопросов и поддержки создавайте Issues в репозитории.
 
