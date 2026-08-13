@@ -6,24 +6,19 @@ from pathlib import Path
 def start_backend():
     """Запуск GFP CoreX бэкенда"""
     
-    # Путь к виртуальному окружению
-    venv_path = Path("D:/PROJECTS/Python/SELF/GFP CoreX/venv/Scripts/python.exe")
-    
-    # Проверяем существование файла
-    if not venv_path.exists():
-        print(f"❌ Ошибка: Python не найден по пути {venv_path}")
-        return False
+    python_exe = sys.executable
+    project_root = Path(__file__).parent.resolve()
     
     try:
         print("🚀 Запуск GFP CoreX бэкенда...")
-        print(f"📁 Путь к Python: {venv_path}")
+        print(f"📁 Путь к Python: {python_exe}")
         
         # Запускаем процесс
         process = subprocess.Popen([
-            str(venv_path),
+            python_exe,
             "-m", "src.gfpcorex.main"
         ], 
-        cwd="D:/PROJECTS/Python/SELF/GFP CoreX",
+        cwd=str(project_root),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True

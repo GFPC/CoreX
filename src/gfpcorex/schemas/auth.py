@@ -1,11 +1,13 @@
 """
 Authentication schemas for GFP CoreX API.
+Fully migrated to Pydantic v2 field_validator syntax.
 """
 
+import re
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field, validator
-import re
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class UserBase(BaseModel):
@@ -22,19 +24,19 @@ class UserCreate(UserBase):
     """Schema for user registration."""
     password: str = Field(..., min_length=8, max_length=128, description="Password")
     confirm_password: str = Field(..., description="Password confirmation")
-    
-    @validator('username')
-    def validate_username(cls, v):
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
         """Validate username format."""
         if not re.match(r'^[a-zA-Z0-9_]+$', v):
             raise ValueError('Username must contain only letters, numbers, and underscores')
         return v
-    
-    @validator('password')
-    def validate_password(cls, v):
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
         """Validate password strength."""
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
         if not re.search(r'[A-Z]', v):
             raise ValueError('Password must contain at least one uppercase letter')
         if not re.search(r'[a-z]', v):
@@ -42,20 +44,23 @@ class UserCreate(UserBase):
         if not re.search(r'\d', v):
             raise ValueError('Password must contain at least one digit')
         return v
-    
-    @validator('confirm_password')
-    def validate_confirm_password(cls, v, values):
-        """Validate password confirmation."""
-        if 'password' in values and v != values['password']:
+
+    @model_validator(mode='after')
+    def passwords_match(self) -> 'UserCreate':
+        """Validate that password and confirm_password match."""
+        if self.password != self.confirm_password:
             raise ValueError('Passwords do not match')
-        return v
+        return self
 
 
 class UserLogin(BaseModel):
     """Schema for user login."""
     username: str = Field(..., description="Username or email")
     password: str = Field(..., description="Password")
-    expires_in: Optional[int] = Field(None, ge=0, description="Token expiration time in seconds. If not provided, token will be perpetual")
+    expires_in: Optional[int] = Field(
+        None, ge=0,
+        description="Token expiration time in seconds. If not provided, token will be perpetual"
+    )
 
 
 class UserUpdate(BaseModel):
@@ -69,15 +74,14 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     """Schema for user response."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_active: bool
     is_superuser: bool
     avatar_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class UserProfile(UserResponse):
@@ -89,7 +93,9 @@ class Token(BaseModel):
     """Schema for authentication token."""
     access_token: str
     token_type: str = "bearer"
-    expires_in: Optional[int] = Field(None, description="Token expiration time in seconds. None means perpetual token")
+    expires_in: Optional[int] = Field(
+        None, description="Token expiration time in seconds. None means perpetual token"
+    )
     refresh_token: Optional[str] = None
 
 
@@ -100,31 +106,34 @@ class TokenData(BaseModel):
     config_name: Optional[str] = None
 
 
+def _validate_password_strength(v: str) -> str:
+    """Shared password strength validator."""
+    if not re.search(r'[A-Z]', v):
+        raise ValueError('Password must contain at least one uppercase letter')
+    if not re.search(r'[a-z]', v):
+        raise ValueError('Password must contain at least one lowercase letter')
+    if not re.search(r'\d', v):
+        raise ValueError('Password must contain at least one digit')
+    return v
+
+
 class PasswordChange(BaseModel):
     """Schema for password change."""
     current_password: str = Field(..., description="Current password")
     new_password: str = Field(..., min_length=8, max_length=128, description="New password")
     confirm_password: str = Field(..., description="Password confirmation")
-    
-    @validator('new_password')
-    def validate_new_password(cls, v):
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
         """Validate new password strength."""
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
-        if not re.search(r'[A-Z]', v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not re.search(r'[a-z]', v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not re.search(r'\d', v):
-            raise ValueError('Password must contain at least one digit')
-        return v
-    
-    @validator('confirm_password')
-    def validate_confirm_password(cls, v, values):
-        """Validate password confirmation."""
-        if 'new_password' in values and v != values['new_password']:
+        return _validate_password_strength(v)
+
+    @model_validator(mode='after')
+    def passwords_match(self) -> 'PasswordChange':
+        if self.new_password != self.confirm_password:
             raise ValueError('Passwords do not match')
-        return v 
+        return self
 
 
 class TokenRequest(BaseModel):
@@ -147,23 +156,16 @@ class PasswordChangeWithToken(TokenRequest):
     new_password: str = Field(..., min_length=8, max_length=128, description="New password")
     confirm_password: str = Field(..., description="Password confirmation")
 
-    @validator('new_password')
-    def validate_new_password(cls, v):
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
-        if not re.search(r'[A-Z]', v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not re.search(r'[a-z]', v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not re.search(r'\d', v):
-            raise ValueError('Password must contain at least one digit')
-        return v
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
-    @validator('confirm_password')
-    def validate_confirm_password(cls, v, values):
-        if 'new_password' in values and v != values['new_password']:
+    @model_validator(mode='after')
+    def passwords_match(self) -> 'PasswordChangeWithToken':
+        if self.new_password != self.confirm_password:
             raise ValueError('Passwords do not match')
-        return v
+        return self
 
 
 class UserProfileRequest(TokenRequest):
@@ -184,4 +186,4 @@ class AdminUsersRequest(TokenRequest):
 
 class AdminUserActionRequest(TokenRequest):
     """Schema for admin user action request with token."""
-    user_id: int = Field(..., gt=0, description="User ID to perform action on") 
+    user_id: int = Field(..., gt=0, description="User ID to perform action on")

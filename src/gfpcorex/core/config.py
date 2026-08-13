@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -20,7 +20,8 @@ class DatabaseConfig(BaseModel):
     pool_pre_ping: bool = Field(default=True, description="Enable connection health checks")
     echo: bool = Field(default=False, description="Enable SQL logging")
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url(cls, v: str) -> str:
         """Validate database URL format."""
         # Поддержка всех популярных баз данных
@@ -34,7 +35,7 @@ class DatabaseConfig(BaseModel):
             "cockroachdb+asyncpg://",   # CockroachDB
             "redis://",                 # Redis как БД
         ]
-        
+
         if not any(v.startswith(driver) for driver in supported_drivers):
             raise ValueError(f"Database URL must use one of supported async drivers: {', '.join(supported_drivers)}")
         return v
@@ -67,7 +68,8 @@ class RedisConfig(BaseModel):
     pool_size: int = Field(default=10, description="Connection pool size")
     decode_responses: bool = Field(default=True, description="Decode responses to strings")
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url(cls, v: str) -> str:
         """Validate Redis URL format."""
         if not v.startswith("redis://"):
@@ -82,7 +84,8 @@ class AuthConfig(BaseModel):
     access_token_expire_minutes: int = Field(default=30, description="Access token expiry")
     refresh_token_expire_days: int = Field(default=7, description="Refresh token expiry")
 
-    @validator("secret_key")
+    @field_validator("secret_key")
+    @classmethod
     def validate_secret_key(cls, v: str) -> str:
         """Validate secret key length."""
         if len(v) < 32:

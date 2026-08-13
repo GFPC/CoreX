@@ -239,21 +239,18 @@ class BrightBackendGUI:
     def _run_backend(self):
         """Запуск бэкенда в отдельном потоке"""
         try:
-            venv_path = Path("D:/PROJECTS/Python/SELF/GFP CoreX/venv/Scripts/python.exe")
-            
-            if not venv_path.exists():
-                self.log_message("❌ Ошибка: Python не найден!")
-                return
+            python_exe = sys.executable
+            project_root = Path(__file__).parent.resolve()
             
             self.log_message("🚀 Запуск GFP CoreX бэкенда...")
-            self.log_message(f"📁 Путь к Python: {venv_path}")
+            self.log_message(f"📁 Путь к Python: {python_exe}")
             
             # Запуск процесса
             self.process = subprocess.Popen([
-                str(venv_path),
+                python_exe,
                 "-m", "src.gfpcorex.main"
             ],
-            cwd="D:/PROJECTS/Python/SELF/GFP CoreX",
+            cwd=str(project_root),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

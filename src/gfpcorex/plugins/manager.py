@@ -18,6 +18,7 @@ from ..models.plugin import Plugin
 from ..core.database import get_session_auto_cleanup, commit_and_close_session
 from ..core.config import get_config
 from ..utils.logging import GFPConsoleMessageStylizer
+from .sandbox import PluginSandbox
 
 ConsoleMessageStylizer = GFPConsoleMessageStylizer("plugin_manager", "#ffa019")
 
@@ -42,6 +43,12 @@ class PluginManager:
             bool: True if plugin loaded successfully
         """
         try:
+            # Static AST security inspection
+            is_safe, violations = PluginSandbox.validate_code(plugin.code)
+            if not is_safe:
+                ConsoleMessageStylizer.log(f"🛡️ Security Blocked plugin '{plugin.name}': {', '.join(violations)}")
+                return False
+
             # Check if plugin code has changed
             if plugin.is_code_changed():
                 # Update hash
@@ -60,7 +67,7 @@ class PluginManager:
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
             
-            # Execute plugin code
+            # Execute plugin code safely
             exec(plugin.code, module.__dict__)
             
             # Initialize config-specific storage if needed
