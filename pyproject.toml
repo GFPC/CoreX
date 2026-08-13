@@ -11,7 +11,7 @@ keywords = ["fastapi", "multi-tenant", "plugin", "async", "backend"]
 packages = [{include = "gfpcorex", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.11"
 fastapi = "^0.116.1"
 uvicorn = {extras = ["standard"], version = "^0.35.0"}
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.42"}
