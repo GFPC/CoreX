@@ -1,18 +1,17 @@
 # Production-ready Dockerfile for GFP CoreX Multi-Config API
 FROM python:3.12-slim
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV POETRY_VERSION=1.7.1
-ENV POETRY_HOME="/opt/poetry"
-ENV POETRY_VENV="/opt/poetry-venv"
-ENV POETRY_CACHE_DIR='/opt/poetry/cache'
+# ── Environment ────────────────────────────────────────────────────────────────
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    POETRY_VERSION=1.8.2 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_CACHE_DIR="/opt/poetry/cache"
 
-# Add Poetry to PATH
-ENV PATH="$POETRY_VENV/bin:$PATH"
+# Add Poetry to PATH (POETRY_HOME/bin — NOT POETRY_VENV)
+ENV PATH="$POETRY_HOME/bin:$PATH"
 
-# Install system dependencies
+# ── System dependencies ────────────────────────────────────────────────────────
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
@@ -20,33 +19,32 @@ RUN apt-get update \
         libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
-RUN poetry config virtualenvs.create false
+# ── Install Poetry + configure (single layer → PATH is guaranteed) ─────────────
+RUN curl -sSL https://install.python-poetry.org | python3 - \
+    && poetry config virtualenvs.create false \
+    && poetry --version
 
-# Set work directory
+# ── Application ────────────────────────────────────────────────────────────────
 WORKDIR /app
 
-# Copy poetry files
+# Copy only dependency files first (Docker layer cache optimisation)
 COPY pyproject.toml poetry.lock ./
 
-# Install dependencies
-RUN poetry install --no-dev --no-interaction --no-ansi
+# Install production dependencies only (--only main replaces deprecated --no-dev)
+RUN poetry install --only main --no-interaction --no-ansi
 
-# Copy application code
+# Copy application source
 COPY . .
 
-# Create non-root user
-RUN adduser --disabled-password --gecos '' appuser
-RUN chown -R appuser:appuser /app
+# ── Security: run as non-root ──────────────────────────────────────────────────
+RUN adduser --disabled-password --gecos '' appuser \
+    && chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
+# ── Runtime ───────────────────────────────────────────────────────────────────
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
-CMD ["uvicorn", "src.gfpcorex.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["uvicorn", "src.gfpcorex.main:app", "--host", "0.0.0.0", "--port", "8000"]
