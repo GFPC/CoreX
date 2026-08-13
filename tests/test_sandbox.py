@@ -2,8 +2,7 @@
 Unit tests for GFP CoreX Plugin Sandbox static AST validation.
 """
 
-import pytest
-from src.gfpcorex.plugins.sandbox import PluginSandbox, PluginSecurityChecker
+from src.gfpcorex.plugins.sandbox import PluginSandbox
 
 
 def test_sandbox_allows_safe_code():

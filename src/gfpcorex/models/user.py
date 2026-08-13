@@ -4,8 +4,9 @@ Supports multi-configuration user management.
 """
 
 from datetime import datetime
-from typing import Optional, List
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+from typing import List, Optional
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -60,5 +61,4 @@ class User(Base):
     @property
     def active_sessions(self) -> List["AuthSession"]:
         """Get user's active (non-expired) sessions."""
-        from .auth_session import AuthSession
         return [session for session in self.auth_sessions if not session.is_expired] 

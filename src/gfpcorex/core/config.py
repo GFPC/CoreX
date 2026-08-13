@@ -3,13 +3,11 @@ Configuration management for multi-configuration FastAPI backend.
 Supports dynamic loading of configurations from YAML files.
 """
 
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
-from pydantic_settings import BaseSettings
 
 
 class DatabaseConfig(BaseModel):

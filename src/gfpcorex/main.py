@@ -9,10 +9,11 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.gfpcorex.utils.logging import GFPConsoleMessageStylizer
-from .core.config import get_available_configs, get_config
-from .core.database import init_database, close_database
-from .core.redis_manager import init_redis, close_redis
+
 from .api.config import create_config_router
+from .core.config import get_available_configs, get_config
+from .core.database import close_database, init_database
+from .core.redis_manager import close_redis, init_redis
 
 ConsoleMessageStylizer = GFPConsoleMessageStylizer("main", "#1bffcc")
 
@@ -55,7 +56,7 @@ async def _on_startup() -> None:
     ConsoleMessageStylizer.log("🎉 GFP CoreX started successfully")
     for i in configs_feedack["configs"]:
         ConsoleMessageStylizer.log(f"----Configuration '{i['name']}' - Database: {i['db']['status']}, Redis: {i['redis']['status']}")
-    ConsoleMessageStylizer.log(f"ok")
+    ConsoleMessageStylizer.log("ok")
 
 
 async def _on_shutdown() -> None:

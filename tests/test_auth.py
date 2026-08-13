@@ -2,12 +2,20 @@
 Unit tests for GFP CoreX AuthService, JWT creation, and password hashing.
 """
 
+
 import pytest
-from datetime import timedelta
 from fastapi import HTTPException
 
+from src.gfpcorex.core.config import (
+    AppConfig,
+    AuthConfig,
+    Config,
+    DatabaseConfig,
+    LoggingConfig,
+    RedisConfig,
+    SecurityConfig,
+)
 from src.gfpcorex.services.auth import AuthService
-from src.gfpcorex.core.config import Config, DatabaseConfig, AuthConfig, RedisConfig, AppConfig, LoggingConfig, SecurityConfig
 
 
 @pytest.fixture

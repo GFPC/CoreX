@@ -1,9 +1,12 @@
 from datetime import datetime
-from typing import Optional, List
-from sqlalchemy import Integer, String, DateTime, Text
+from typing import List, Optional
+
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+
 from ..core.database import Base
+
 
 class UserRole(Base):
     __tablename__ = "user_roles"

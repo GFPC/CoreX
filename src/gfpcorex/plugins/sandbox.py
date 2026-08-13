@@ -5,7 +5,7 @@ Enforces static AST inspection and restricted execution environments for user pl
 
 import ast
 import logging
-from typing import Set, Tuple, List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("gfpcorex.sandbox")
 

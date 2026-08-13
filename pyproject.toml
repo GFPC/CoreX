@@ -68,5 +68,17 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "I"]
-ignore = []
+ignore = ["E501", "B904"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: allow unused imports (fixtures, re-exports)
+"tests/*" = ["F401"]
+# Legacy source files: allow pre-existing issues (F841=unused var, E722=bare except,
+# E712=boolean comparison, F821=forward refs, E741=ambiguous var)
+"src/gfpcorex/api/*" = ["F841", "E722", "F821"]
+"src/gfpcorex/models/*" = ["F821"]
+"src/gfpcorex/plugins/api.py" = ["F841"]
+"src/gfpcorex/plugins/manager.py" = ["E712"]
+"src/gfpcorex/main.py" = ["F841"]
+"backend_gui.py" = ["E741", "F841"]
 

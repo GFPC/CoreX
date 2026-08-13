@@ -4,9 +4,15 @@ Provides reusable Config instances and mock data for all tests.
 """
 
 import pytest
+
 from src.gfpcorex.core.config import (
-    Config, DatabaseConfig, AuthConfig,
-    RedisConfig, AppConfig, LoggingConfig, SecurityConfig,
+    AppConfig,
+    AuthConfig,
+    Config,
+    DatabaseConfig,
+    LoggingConfig,
+    RedisConfig,
+    SecurityConfig,
 )
 
 

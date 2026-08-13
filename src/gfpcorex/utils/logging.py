@@ -1,8 +1,5 @@
-import logging
-import sys
-from typing import Optional
 from datetime import datetime
-import os
+
 
 class HexColorFormatter:
     """Форматтер с hex цветами для тегов"""

@@ -1,13 +1,12 @@
-import tkinter as tk
-from tkinter import ttk, scrolledtext
 import subprocess
-import threading
 import sys
-from pathlib import Path
+import threading
+import tkinter as tk
 import webbrowser
 from datetime import datetime
-import signal
-import os
+from pathlib import Path
+from tkinter import ttk
+
 
 class BrightBackendGUI:
     def __init__(self, root):

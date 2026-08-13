@@ -3,16 +3,16 @@ Plugin management API routes for GFP CoreX.
 Supports creating, loading and executing user-created plugins.
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-
-from ..plugins.manager import plugin_manager
-from ..plugins.api import get_plugin_api
-from ..core.database import get_session_auto_cleanup, commit_and_close_session
-from ..core.config import get_config
-from ..models.plugin import Plugin
 from sqlalchemy import select
+
+from ..core.config import get_config
+from ..core.database import commit_and_close_session, get_session_auto_cleanup
+from ..models.plugin import Plugin
+from ..plugins.manager import plugin_manager
 
 
 class PluginCreate(BaseModel):

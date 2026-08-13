@@ -3,16 +3,14 @@ Plugin API for GFP CoreX.
 Provides access to core system functions for plugins.
 """
 
-import asyncio
 import json
-import requests
-from typing import Dict, Any, Optional, List
 from datetime import datetime
+from typing import Any, Dict, Optional
 
-from ..core.database import get_session_auto_cleanup, commit_and_close_session
+import requests
+
 from ..core.config import get_config
-from ..models.user import User
-from ..models.auth_session import AuthSession
+from ..core.database import commit_and_close_session, get_session_auto_cleanup
 
 
 class PluginAPI:

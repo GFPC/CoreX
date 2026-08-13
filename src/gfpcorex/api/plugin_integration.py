@@ -2,13 +2,12 @@
 API интеграция плагинов в другие эндпоинты
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
-import asyncio
 
 from ..plugins.manager import plugin_manager
-from ..core.config import get_config
 
 router = APIRouter(tags=["Plugin Integration"])
 

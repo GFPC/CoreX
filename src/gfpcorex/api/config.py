@@ -3,19 +3,25 @@ Configuration management API routes for GFP CoreX.
 Supports dynamic configuration creation and management.
 """
 
-from typing import List
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..schemas.config import (
-    ConfigCreate, ConfigUpdate, ConfigInfo, ConfigList, ConfigResponse
-)
 from ..core.config import (
-    create_config, update_config, delete_config, get_config_info,
-    get_available_configs, reload_config, clear_config_cache
+    clear_config_cache,
+    create_config,
+    delete_config,
+    get_available_configs,
+    get_config_info,
+    reload_config,
+    update_config,
 )
-from ..core.database import get_session_auto_cleanup, commit_and_close_session
 from ..core.database import db_manager
+from ..schemas.config import (
+    ConfigCreate,
+    ConfigInfo,
+    ConfigList,
+    ConfigResponse,
+    ConfigUpdate,
+)
 
 
 def create_config_router() -> APIRouter:

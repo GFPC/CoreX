@@ -32,20 +32,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-py3.12-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            venv-${{ runner.os }}-py3.12-
 
       - name: Install Dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --sync
 
-      - name: Install Root Package
-        run: poetry install --no-interaction
+      - name: Install Root Package (if cache hit)
+        if: steps.cached-poetry-dependencies.outputs.cache-hit == 'true'
+        run: poetry install --no-interaction --sync
 
       - name: Run Ruff Linter
-        run: poetry run ruff check .
+        run: poetry run ruff check . --output-format=github
 
       - name: Run Pytest Suite
-        run: poetry run pytest tests/ --cov=src/gfpcorex --cov-report=xml
+        run: poetry run pytest tests/ --cov=src/gfpcorex --cov-report=xml --tb=short
 
   docker-build:
     name: Docker Build Validation
@@ -64,3 +67,4 @@ jobs:
           file: ./Dockerfile
           push: false
           tags: gfp-corex:ci-test
+          load: true

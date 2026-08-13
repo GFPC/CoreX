@@ -4,25 +4,33 @@ Supports multi-configuration user management.
 """
 
 from datetime import timedelta
-from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import APIRouter, HTTPException, Request, status
+
+from ..core.config import get_config
+from ..core.database import commit_and_close_session, get_session_auto_cleanup
 from ..models.user import User
-from ..models.auth_session import AuthSession
 from ..schemas.auth import (
-    UserCreate, UserLogin, UserResponse, UserProfile, 
-    UserUpdate, Token, PasswordChange, TokenRequest,
-    UserUpdateWithToken, PasswordChangeWithToken, UserProfileRequest,
-    UserDeleteRequest, AdminUsersRequest, AdminUserActionRequest
+    AdminUserActionRequest,
+    AdminUsersRequest,
+    PasswordChange,
+    PasswordChangeWithToken,
+    Token,
+    TokenRequest,
+    UserCreate,
+    UserDeleteRequest,
+    UserLogin,
+    UserProfile,
+    UserProfileRequest,
+    UserResponse,
+    UserUpdateWithToken,
 )
 from ..services.auth import (
-    AuthService, get_current_active_user_from_token, 
-    get_current_superuser_from_token, get_current_user_from_token
+    AuthService,
+    get_current_active_user_from_token,
+    get_current_superuser_from_token,
 )
-from ..core.config import get_config
-from ..core.database import get_session_auto_cleanup, commit_and_close_session
+
 
 def create_universal_auth_router() -> APIRouter:
     """Create universal authentication router for all configurations."""

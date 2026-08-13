@@ -2,10 +2,17 @@
 Unit tests for GFP CoreX ConfigManager and Pydantic validation schemas.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
-from src.gfpcorex.core.config import ConfigManager, Config, DatabaseConfig, AuthConfig, RedisConfig
+
+import pytest
+
+from src.gfpcorex.core.config import (
+    AuthConfig,
+    ConfigManager,
+    DatabaseConfig,
+    RedisConfig,
+)
 
 
 @pytest.fixture

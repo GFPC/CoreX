@@ -18,14 +18,13 @@ Usage Examples:
     # No need to close them manually.
 """
 
-import asyncio
-from typing import Dict, Optional
+from typing import Dict
 
 import redis.asyncio as redis
 from redis.asyncio import ConnectionPool, Redis
 
-from .config import Config
 from ..utils.logging import GFPConsoleMessageStylizer
+from .config import Config
 
 ConsoleMessageStylizer = GFPConsoleMessageStylizer("redis", "#cc0066")
 

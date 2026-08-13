@@ -3,21 +3,21 @@ Authentication service for GFP CoreX.
 Supports multi-configuration user management.
 """
 
-from datetime import datetime, timedelta, UTC
-from typing import Optional, Union
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
-from sqlalchemy.orm import selectinload
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from fastapi import HTTPException, status, Depends, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from datetime import UTC, datetime, timedelta
+from typing import Optional
 
-from ..models.user import User
-from ..models.auth_session import AuthSession
-from ..schemas.auth import UserCreate, UserLogin, TokenData, PasswordChange
+from fastapi import HTTPException, status
+from fastapi.security import HTTPBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..core.config import Config
-from ..core.database import get_session_auto_cleanup, commit_and_close_session
+from ..core.database import commit_and_close_session, get_session_auto_cleanup
+from ..models.auth_session import AuthSession
+from ..models.user import User
+from ..schemas.auth import PasswordChange, TokenData, UserCreate
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

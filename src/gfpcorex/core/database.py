@@ -31,10 +31,9 @@ Usage Examples:
         raise
 """
 
-import asyncio
-from typing import Dict, Optional
+from typing import Dict
 
-from sqlalchemy import MetaData, text, inspect
+from sqlalchemy import MetaData, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -43,8 +42,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-from .config import Config
 from ..utils.logging import GFPConsoleMessageStylizer
+from .config import Config
 
 ConsoleMessageStylizer = GFPConsoleMessageStylizer("database", "#0066cc")
 
@@ -220,10 +219,7 @@ class DatabaseManager:
             ConsoleMessageStylizer.log(f"🔧 Creating tables from models for {config_name}...")
             
             # Import all models to ensure they are registered with Base.metadata
-            from ..models.user import User
-            from ..models.auth_session import AuthSession
             from ..models.user_role import UserRole
-            from ..models.plugin import Plugin
             
             engine = self.get_engine(config_name, config)
             

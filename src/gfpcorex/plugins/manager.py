@@ -3,20 +3,16 @@ Plugin manager for GFP CoreX.
 Handles loading, execution and management of user-created plugins.
 """
 
-import asyncio
-import hashlib
 import importlib.util
 import sys
 import traceback
-from typing import Dict, List, Optional, Any, Callable
-from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from ..models.plugin import Plugin
-from ..core.database import get_session_auto_cleanup, commit_and_close_session
 from ..core.config import get_config
+from ..core.database import commit_and_close_session, get_session_auto_cleanup
+from ..models.plugin import Plugin
 from ..utils.logging import GFPConsoleMessageStylizer
 from .sandbox import PluginSandbox
 
@@ -194,7 +190,6 @@ class PluginManager:
             try:
                 # Check if function is async
                 import asyncio
-                import inspect
                 
                 if asyncio.iscoroutinefunction(func):
                     return await func(*args, **kwargs)
