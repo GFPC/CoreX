@@ -32,6 +32,22 @@ FORBIDDEN_BUILTINS: Set[str] = {
     "__import__",
     "compile",
     "breakpoint",
+    "input",
+    "globals",
+    "locals",
+    "vars",
+    "getattr",
+    "setattr",
+    "delattr",
+}
+
+# Names that must never be *referenced* at all — not merely called. This blocks
+# indirection tricks such as aliasing (``e = eval``) or reaching the real
+# interpreter builtins through ``__builtins__["eval"]``.
+FORBIDDEN_NAMES: Set[str] = FORBIDDEN_BUILTINS | {
+    "__builtins__",
+    "__loader__",
+    "__spec__",
 }
 
 # Safe builtins allowed in plugin execution scope
@@ -100,6 +116,7 @@ class PluginSecurityChecker(ast.NodeVisitor):
     def __init__(self, allowed_modules: Optional[Set[str]] = None):
         self.forbidden_modules = FORBIDDEN_MODULES
         self.forbidden_builtins = FORBIDDEN_BUILTINS
+        self.forbidden_names = FORBIDDEN_NAMES
         self.errors: List[str] = []
 
     def visit_Import(self, node: ast.Import):
@@ -126,6 +143,15 @@ class PluginSecurityChecker(ast.NodeVisitor):
                 self.errors.append(
                     f"Line {node.lineno}: Calling restricted builtin function '{node.func.id}()' is prohibited."
                 )
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name):
+        # Catches bare references and subscript access (e.g. ``__builtins__[...]``)
+        # that visit_Call alone would miss.
+        if node.id in self.forbidden_names:
+            self.errors.append(
+                f"Line {node.lineno}: Reference to restricted name '{node.id}' is not allowed."
+            )
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute):

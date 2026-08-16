@@ -4,7 +4,7 @@ Supports multi-configuration user management.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -12,6 +12,10 @@ from sqlalchemy.sql import func
 
 from ..core.database import Base
 from .user_role import UserRole
+
+if TYPE_CHECKING:
+    # Imported only for typing the relationship; avoids a runtime circular import.
+    from .auth_session import AuthSession
 
 
 class User(Base):

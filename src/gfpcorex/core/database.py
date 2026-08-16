@@ -367,6 +367,29 @@ async def init_database(config_name: str, config: Config) -> dict:
         }
 
 
+async def ping_database(config_name: str, config: Config) -> bool:
+    """
+    Lightweight database connectivity check.
+
+    Executes ``SELECT 1`` against the configuration's engine without touching or
+    creating the schema, so it is safe to call on every health-check request.
+
+    Args:
+        config_name: Name of the configuration
+        config: Configuration object
+
+    Returns:
+        bool: True if the database answered the probe query.
+    """
+    try:
+        engine = db_manager.get_engine(config_name, config)
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
 async def close_database() -> None:
     """Close all database connections."""
     await db_manager.close_all()

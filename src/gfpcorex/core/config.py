@@ -3,11 +3,36 @@ Configuration management for multi-configuration FastAPI backend.
 Supports dynamic loading of configurations from YAML files.
 """
 
+import os
+import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
+
+# Matches ${VAR} and ${VAR:-default} for environment-variable interpolation in YAML.
+_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+# Placeholder secret keys that must never be used to sign tokens.
+_INSECURE_SECRET_KEYS = {
+    "your-secret-key-here-make-it-long-and-secure-32-chars-min",
+}
+
+
+def _expand_env_vars(value: Any) -> Any:
+    """Recursively expand ${VAR} / ${VAR:-default} references using os.environ."""
+    if isinstance(value, str):
+        def _replace(match: "re.Match[str]") -> str:
+            var_name, default = match.group(1), match.group(2)
+            return os.environ.get(var_name, default if default is not None else "")
+
+        return _ENV_VAR_PATTERN.sub(_replace, value)
+    if isinstance(value, dict):
+        return {key: _expand_env_vars(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    return value
 
 
 class DatabaseConfig(BaseModel):
@@ -85,9 +110,14 @@ class AuthConfig(BaseModel):
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
-        """Validate secret key length."""
+        """Validate secret key length and reject known placeholders."""
         if len(v) < 32:
             raise ValueError("Secret key must be at least 32 characters long")
+        if v in _INSECURE_SECRET_KEYS or "your-secret-key-here" in v:
+            raise ValueError(
+                "Secret key is a placeholder; provide a real secret via an "
+                "environment variable (e.g. ${GFP_PROD_SECRET_KEY})"
+            )
         return v
 
 
@@ -161,7 +191,10 @@ class ConfigManager:
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 config_data = yaml.safe_load(f)
-            
+
+            # Expand ${ENV_VAR} references so secrets never live in the YAML.
+            config_data = _expand_env_vars(config_data)
+
             # Validate and create config
             config = Config(**config_data)
             

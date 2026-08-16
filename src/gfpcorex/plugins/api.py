@@ -4,7 +4,6 @@ Provides access to core system functions for plugins.
 """
 
 import json
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 import requests
@@ -143,16 +142,9 @@ class PluginAPI:
             bool: True if logged successfully
         """
         try:
-            log_entry = {
-                "timestamp": datetime.now().isoformat(),
-                "event_type": event_type,
-                "data": data,
-                "plugin": "user_plugin"
-            }
-            
             print(f"📝 [PLUGIN LOG] {event_type}: {json.dumps(data, indent=2)}")
             return True
-            
+
         except Exception as e:
             print(f"❌ Error logging event: {e}")
             return False
@@ -172,17 +164,9 @@ class PluginAPI:
         try:
             # Simple task scheduling (in production would use Celery or similar)
             print(f"⏰ Scheduled task '{task_name}' for {delay_seconds} seconds from now")
-            
-            # Store task info (in production would store in database)
-            task_info = {
-                "name": task_name,
-                "scheduled_at": datetime.now().isoformat(),
-                "execute_at": (datetime.now().timestamp() + delay_seconds),
-                "data": task_data or {}
-            }
-            
+
             return True
-            
+
         except Exception as e:
             print(f"❌ Error scheduling task: {e}")
             return False

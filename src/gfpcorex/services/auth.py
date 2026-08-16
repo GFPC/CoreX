@@ -6,24 +6,19 @@ Supports multi-configuration user management.
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
+import bcrypt
 from fastapi import HTTPException, status
-from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import Config
-from ..core.database import commit_and_close_session, get_session_auto_cleanup
 from ..models.auth_session import AuthSession
 from ..models.user import User
 from ..schemas.auth import PasswordChange, TokenData, UserCreate
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# JWT token security
-security = HTTPBearer()
+# bcrypt rejects inputs longer than 72 bytes; truncate consistently before hashing.
+_BCRYPT_MAX_BYTES = 72
 
 
 class AuthService:
@@ -36,20 +31,28 @@ class AuthService:
         self.access_token_expire_minutes = config.auth.access_token_expire_minutes
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash."""
-        return pwd_context.verify(plain_password, hashed_password)
-    
+        """Verify a password against its bcrypt hash."""
+        try:
+            return bcrypt.checkpw(
+                plain_password.encode("utf-8")[:_BCRYPT_MAX_BYTES],
+                hashed_password.encode("utf-8"),
+            )
+        except (ValueError, TypeError):
+            return False
+
     def get_password_hash(self, password: str) -> str:
-        """Hash a password."""
-        return pwd_context.hash(password)
+        """Hash a password with bcrypt using the configured cost factor."""
+        salt = bcrypt.gensalt(rounds=self.config.security.bcrypt_rounds)
+        hashed = bcrypt.hashpw(password.encode("utf-8")[:_BCRYPT_MAX_BYTES], salt)
+        return hashed.decode("utf-8")
     
     def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token."""
         to_encode = data.copy()
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now(UTC) + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes)
+            expire = datetime.now(UTC) + timedelta(minutes=self.access_token_expire_minutes)
         
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
@@ -185,7 +188,16 @@ class AuthService:
         stmt = select(AuthSession).where(AuthSession.token == token)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
-    
+
+    async def delete_auth_session(self, session: AsyncSession, token: str) -> bool:
+        """Delete an authentication session by its token (revoke it on logout)."""
+        auth_session = await self.get_auth_session_by_token(session, token)
+        if auth_session is None:
+            return False
+        await session.delete(auth_session)
+        await session.commit()
+        return True
+
     async def delete_expired_sessions(self, session: AsyncSession) -> int:
         """Delete expired sessions."""
         from sqlalchemy import and_
@@ -193,7 +205,7 @@ class AuthService:
         stmt = select(AuthSession).where(
             and_(
                 AuthSession.expires_at.isnot(None),
-                AuthSession.expires_at < datetime.utcnow()
+                AuthSession.expires_at < datetime.now(UTC)
             )
         )
         result = await session.execute(stmt)
@@ -245,71 +257,3 @@ class AuthService:
         await session.commit()
         
         return True
-
-
-# Dependency to get current user from token in request body
-async def get_current_user_from_token(
-    config_name: str,
-    token: str
-) -> User:
-    """Get current authenticated user from token in request body."""
-    # Get config for this configuration
-    from ..core.config import get_config
-    try:
-        config = get_config(config_name)
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Configuration '{config_name}' not found"
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid configuration '{config_name}': {str(e)}"
-        )
-    
-    auth_service = AuthService(config)
-    token_data = auth_service.verify_token(token)
-    
-    # Verify token is for correct configuration
-    if token_data.config_name != config_name:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token is not valid for this configuration"
-        )
-    
-    session = await get_session_auto_cleanup(config_name, config)
-    try:
-        user = await auth_service.get_user_by_id(session, token_data.user_id)
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found"
-            )
-        return user
-    finally:
-        await commit_and_close_session(session)
-
-
-# Dependency to get current active user from token
-async def get_current_active_user_from_token(config_name: str, token: str) -> User:
-    """Get current active user from token in request body."""
-    current_user = await get_current_user_from_token(config_name, token)
-    if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
-        )
-    return current_user
-
-
-# Dependency to get current superuser from token
-async def get_current_superuser_from_token(config_name: str, token: str) -> User:
-    """Get current superuser from token in request body."""
-    current_user = await get_current_active_user_from_token(config_name, token)
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    return current_user 

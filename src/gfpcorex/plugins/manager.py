@@ -14,7 +14,7 @@ from ..core.config import get_config
 from ..core.database import commit_and_close_session, get_session_auto_cleanup
 from ..models.plugin import Plugin
 from ..utils.logging import GFPConsoleMessageStylizer
-from .sandbox import PluginSandbox
+from .sandbox import SAFE_BUILTINS, PluginSandbox
 
 ConsoleMessageStylizer = GFPConsoleMessageStylizer("plugin_manager", "#ffa019")
 
@@ -62,8 +62,13 @@ class PluginManager:
             # Create module
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
-            
-            # Execute plugin code safely
+
+            # Execute the plugin with a restricted builtins namespace. Even if the
+            # static AST inspection above were bypassed, running code cannot reach
+            # open()/eval()/__import__()/etc. because __builtins__ is limited to the
+            # vetted SAFE_BUILTINS set. A per-plugin copy prevents cross-plugin
+            # tampering with the shared mapping.
+            module.__dict__["__builtins__"] = dict(SAFE_BUILTINS)
             exec(plugin.code, module.__dict__)
             
             # Initialize config-specific storage if needed
@@ -104,7 +109,7 @@ class PluginManager:
             try:
                 # Get all active plugins
                 result = await session.execute(
-                    select(Plugin).where(Plugin.is_active == True)
+                    select(Plugin).where(Plugin.is_active.is_(True))
                 )
                 plugins = result.scalars().all()
 

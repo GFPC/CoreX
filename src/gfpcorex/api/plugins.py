@@ -302,7 +302,7 @@ def create_plugin_router() -> APIRouter:
                     )
                 
                 # Remove from loaded plugins
-                if plugin_name in plugin_manager.get_loaded_plugins():
+                if plugin_name in plugin_manager.get_loaded_plugins(config_name):
                     # This would need to be implemented in plugin_manager
                     pass
                 

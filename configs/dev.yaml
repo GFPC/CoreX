@@ -17,7 +17,9 @@ redis:
 
 # Authentication
 auth:
-  secret_key: "your-secret-key-here-make-it-long-and-secure-32-chars-min"
+  # Loaded from $GFP_DEV_SECRET_KEY; falls back to an obviously-insecure dev default.
+  # NEVER rely on the default outside local development.
+  secret_key: "${GFP_DEV_SECRET_KEY:-dev-insecure-secret-change-me-please-0123456789}"
   algorithm: "HS256"
   access_token_expire_minutes: 30
   refresh_token_expire_days: 7

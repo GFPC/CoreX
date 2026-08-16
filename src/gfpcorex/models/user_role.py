@@ -1,11 +1,15 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from ..core.database import Base
+
+if TYPE_CHECKING:
+    # Imported only for typing the relationship; avoids a runtime circular import.
+    from .user import User
 
 
 class UserRole(Base):

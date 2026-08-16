@@ -1,563 +1,267 @@
 """
 Authentication API routes for GFP CoreX.
-Supports multi-configuration user management.
+
+Tokens are supplied via the standard ``Authorization: Bearer <token>`` header
+(resolved in ``api.deps``); no endpoint accepts a token in the request body.
 """
 
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy import select
 
-from ..core.config import get_config
-from ..core.database import commit_and_close_session, get_session_auto_cleanup
 from ..models.user import User
 from ..schemas.auth import (
-    AdminUserActionRequest,
-    AdminUsersRequest,
     PasswordChange,
-    PasswordChangeWithToken,
     Token,
-    TokenRequest,
     UserCreate,
-    UserDeleteRequest,
     UserLogin,
     UserProfile,
-    UserProfileRequest,
     UserResponse,
-    UserUpdateWithToken,
+    UserUpdate,
 )
-from ..services.auth import (
-    AuthService,
-    get_current_active_user_from_token,
-    get_current_superuser_from_token,
+from ..services.auth import AuthService
+from .deps import (
+    ConfigDep,
+    CurrentActiveUser,
+    CurrentSuperuser,
+    DbDep,
+    bearer_scheme,
 )
 
 
 def create_universal_auth_router() -> APIRouter:
-    """Create universal authentication router for all configurations."""
-    
+    """Create the universal authentication router for all configurations."""
+
     router = APIRouter(prefix="/auth", tags=["Authentication"])
-    
+
     @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
     async def register(
-        config_name: str,
+        config: ConfigDep,
+        session: DbDep,
         user_data: UserCreate,
-        request: Request
+        config_name: str,
     ):
+        """Register a new user and return a finite access token.
+
+        The account is created and a session-backed JWT is issued with the
+        configuration's default lifetime (``access_token_expire_minutes``).
         """
-        Register a new user and return perpetual token.
-        
-        This endpoint creates a new user account and automatically issues a perpetual token.
-        
-        **Features:**
-        - Creates user account with profile information
-        - Automatically generates perpetual token (no expiration)
-        - Saves session to database for tracking
-        - Returns token with user information
-        
-        **Response includes:**
-        - `access_token`: JWT token for authentication
-        - `token_type`: Always "bearer"
-        - `expires_in`: None (perpetual token)
-        - `user`: Complete user profile information
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
         auth_service = AuthService(config)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            # Create user
-            user = await auth_service.create_user(session, user_data)
-            
-            # Create perpetual token
-            token_data = {
-                "sub": user.username,
-                "user_id": user.id,
-                "config_name": config_name
-            }
-            access_token = auth_service.create_perpetual_token(token_data)
-            
-            # Save session to database
-            await auth_service.create_auth_session(session, user.id, access_token)
-            
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "expires_in": None,  # Perpetual token
-                "user": UserResponse.from_orm(user)
-            }
-        except HTTPException:
-            await session.close()
-            raise
-        except Exception as e:
-            await session.close()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create user: {str(e)}"
-            )
-        finally:
-            await commit_and_close_session(session)
-    
+        user = await auth_service.create_user(session, user_data)
+
+        ttl_seconds = config.auth.access_token_expire_minutes * 60
+        token_data = {
+            "sub": user.username,
+            "user_id": user.id,
+            "config_name": config_name,
+        }
+        access_token = auth_service.create_access_token(
+            data=token_data,
+            expires_delta=timedelta(seconds=ttl_seconds),
+        )
+        await auth_service.create_auth_session(session, user.id, access_token, ttl_seconds)
+
+        return Token(access_token=access_token, token_type="bearer", expires_in=ttl_seconds)
+
     @router.post("/login", response_model=Token)
     async def login(
-        config_name: str,
+        config: ConfigDep,
+        session: DbDep,
         user_credentials: UserLogin,
-        request: Request
-    ):
-        """
-        Login user and get access token.
-        
-        This endpoint authenticates a user and returns a JWT token.
-        
-        **Token Expiration:**
-        - If `expires_in` is not provided: perpetual token (no expiration)
-        - If `expires_in` is provided: token expires in specified seconds
-        
-        **Parameters:**
-        - `username`: Username or email address
-        - `password`: User password
-        - `expires_in`: Optional expiration time in seconds (0 = perpetual)
-        
-        **Response includes:**
-        - `access_token`: JWT token for authentication
-        - `token_type`: Always "bearer"
-        - `expires_in`: Expiration time in seconds or None (perpetual)
-        - `user`: Complete user profile information
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
-        auth_service = AuthService(config)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            user = await auth_service.authenticate_user(
-                session, 
-                user_credentials.username, 
-                user_credentials.password
-            )
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Incorrect username or password",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            
-            # Determine token expiration
-            expires_in = user_credentials.expires_in
-            if expires_in is None:
-                # Create perpetual token
-                token_data = {
-                    "sub": user.username,
-                    "user_id": user.id,
-                    "config_name": config_name
-                }
-                access_token = auth_service.create_perpetual_token(token_data)
-                expires_in_seconds = None
-            else:
-                # Create token with specified expiration
-                token_data = {
-                    "sub": user.username,
-                    "user_id": user.id,
-                    "config_name": config_name
-                }
-                access_token = auth_service.create_access_token(
-                    data=token_data,
-                    expires_delta=timedelta(seconds=expires_in)
-                )
-                expires_in_seconds = expires_in
-            
-            # Save session to database
-            await auth_service.create_auth_session(session, user.id, access_token, expires_in)
-            
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "expires_in": expires_in_seconds,
-                "user": UserResponse.from_orm(user)
-            }
-        finally:
-            await commit_and_close_session(session)
-    
-    @router.post("/me", response_model=UserProfile)
-    async def get_current_user_profile(
         config_name: str,
-        request_data: UserProfileRequest
     ):
+        """Authenticate a user and return an access token.
+
+        The token expires after the configured lifetime by default. Supply
+        ``expires_in`` (seconds) to override it, or ``0`` to explicitly request
+        a perpetual token.
         """
-        Get current user profile.
-        
-        This endpoint returns the profile of the currently authenticated user.
-        """
-        try:
-            current_user = await get_current_active_user_from_token(config_name, request_data.token)
-        except FileNotFoundError:
+        auth_service = AuthService(config)
+        user = await auth_service.authenticate_user(
+            session,
+            user_credentials.username,
+            user_credentials.password,
+        )
+        if not user:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
             )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
+
+        token_data = {
+            "sub": user.username,
+            "user_id": user.id,
+            "config_name": config_name,
+        }
+
+        requested = user_credentials.expires_in
+        if requested == 0:
+            # Explicit opt-in to a non-expiring token.
+            access_token = auth_service.create_perpetual_token(token_data)
+            token_ttl = None
+        else:
+            # Default to the configured lifetime when no override is requested.
+            token_ttl = (
+                requested
+                if requested is not None
+                else config.auth.access_token_expire_minutes * 60
             )
-        
-        return UserProfile.from_orm(current_user)
-    
+            access_token = auth_service.create_access_token(
+                data=token_data,
+                expires_delta=timedelta(seconds=token_ttl),
+            )
+
+        await auth_service.create_auth_session(session, user.id, access_token, token_ttl)
+
+        return Token(access_token=access_token, token_type="bearer", expires_in=token_ttl)
+
+    @router.post("/logout")
+    async def logout(
+        config: ConfigDep,
+        session: DbDep,
+        current_user: CurrentActiveUser,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    ):
+        """Revoke the presented token by deleting its persisted session row."""
+        auth_service = AuthService(config)
+        await auth_service.delete_auth_session(session, credentials.credentials)
+        return {"message": "Logged out successfully"}
+
+    @router.get("/me", response_model=UserProfile)
+    async def get_current_user_profile(current_user: CurrentActiveUser):
+        """Return the authenticated user's profile."""
+        return UserProfile.model_validate(current_user)
+
     @router.put("/me", response_model=UserProfile)
     async def update_current_user_profile(
-        config_name: str,
-        request_data: UserUpdateWithToken
+        config: ConfigDep,
+        session: DbDep,
+        user_update: UserUpdate,
+        current_user: CurrentActiveUser,
     ):
-        """
-        Update current user profile.
-        
-        This endpoint allows users to update their profile information.
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
-            )
-        except ValueError as e:
+        """Update the authenticated user's profile."""
+        auth_service = AuthService(config)
+        update_data = user_update.model_dump(exclude_unset=True)
+        if not update_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
+                detail="No data provided for update",
             )
-        
-        auth_service = AuthService(config)
-        current_user = await get_current_active_user_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            # Convert Pydantic model to dict, excluding token and None values
-            update_data = request_data.dict(exclude={'token'}, exclude_unset=True)
-            
-            if not update_data:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No data provided for update"
-                )
-            
-            updated_user = await auth_service.update_user_profile(
-                session, current_user.id, update_data
-            )
-            
-            return UserProfile.from_orm(updated_user)
-        finally:
-            await commit_and_close_session(session)
-    
-    @router.post("/change-password")
+
+        updated_user = await auth_service.update_user_profile(
+            session, current_user.id, update_data
+        )
+        return UserProfile.model_validate(updated_user)
+
+    @router.post("/me/change-password")
     async def change_password(
-        config_name: str,
-        request_data: PasswordChangeWithToken
+        config: ConfigDep,
+        session: DbDep,
+        password_data: PasswordChange,
+        current_user: CurrentActiveUser,
     ):
-        """
-        Change user password.
-        
-        This endpoint allows users to change their password.
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
+        """Change the authenticated user's password."""
         auth_service = AuthService(config)
-        current_user = await get_current_active_user_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            # Create PasswordChange object from request data
-            password_data = PasswordChange(
-                current_password=request_data.current_password,
-                new_password=request_data.new_password,
-                confirm_password=request_data.confirm_password
-            )
-            
-            success = await auth_service.change_password(
-                session, current_user.id, password_data
-            )
-            
-            if success:
-                return {"message": "Password changed successfully"}
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to change password"
-                )
-        finally:
-            await commit_and_close_session(session)
-    
-    @router.post("/users/{user_id}", response_model=UserResponse)
-    async def get_user_by_id(
-        config_name: str,
-        user_id: int,
-        request_data: TokenRequest
-    ):
-        """
-        Get user by ID.
-        
-        This endpoint returns user information by ID (accessible to authenticated users).
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
-        auth_service = AuthService(config)
-        current_user = await get_current_active_user_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            user = await auth_service.get_user_by_id(session, user_id)
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            return UserResponse.from_orm(user)
-        finally:
-            await commit_and_close_session(session)
-    
-    @router.post("/users/username/{username}", response_model=UserResponse)
-    async def get_user_by_username(
-        config_name: str,
-        username: str,
-        request_data: TokenRequest
-    ):
-        """
-        Get user by username.
-        
-        This endpoint returns user information by username (accessible to authenticated users).
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
-        auth_service = AuthService(config)
-        current_user = await get_current_active_user_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            user = await auth_service.get_user_by_username(session, user_id)
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            return UserResponse.from_orm(user)
-        finally:
-            await commit_and_close_session(session)
-    
-    @router.post("/me/delete", status_code=status.HTTP_204_NO_CONTENT)
+        await auth_service.change_password(session, current_user.id, password_data)
+        return {"message": "Password changed successfully"}
+
+    @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_current_user(
-        config_name: str,
-        request_data: UserDeleteRequest
+        session: DbDep,
+        current_user: CurrentActiveUser,
     ):
-        """
-        Delete current user account.
-        
-        This endpoint allows users to delete their own account.
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
+        """Soft-delete the authenticated user's account (marks it inactive)."""
+        current_user.is_active = False
+        await session.commit()
+        return None
+
+    @router.get("/users/{user_id}", response_model=UserResponse)
+    async def get_user_by_id(
+        config: ConfigDep,
+        session: DbDep,
+        user_id: int,
+        current_user: CurrentActiveUser,
+    ):
+        """Return a user by ID (any authenticated user)."""
+        auth_service = AuthService(config)
+        user = await auth_service.get_user_by_id(session, user_id)
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
+                detail="User not found",
             )
-        except ValueError as e:
+        return UserResponse.model_validate(user)
+
+    @router.get("/users/username/{username}", response_model=UserResponse)
+    async def get_user_by_username(
+        config: ConfigDep,
+        session: DbDep,
+        username: str,
+        current_user: CurrentActiveUser,
+    ):
+        """Return a user by username (any authenticated user)."""
+        auth_service = AuthService(config)
+        user = await auth_service.get_user_by_username(session, username)
+        if not user:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
             )
-        
-        current_user = await get_current_active_user_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            # Soft delete - mark as inactive
-            current_user.is_active = False
-            await session.commit()
-            
-            return None
-        finally:
-            await commit_and_close_session(session)
-    
+        return UserResponse.model_validate(user)
+
     # Admin endpoints (superuser only)
-    @router.post("/admin/users", response_model=list[UserResponse])
+    @router.get("/admin/users", response_model=list[UserResponse])
     async def get_all_users(
-        config_name: str,
-        request_data: AdminUsersRequest
+        session: DbDep,
+        current_user: CurrentSuperuser,
+        skip: int = Query(0, ge=0, description="Number of records to skip"),
+        limit: int = Query(100, ge=1, le=1000, description="Maximum records to return"),
     ):
-        """
-        Get all users (admin only).
-        
-        This endpoint returns all users in the configuration (superuser only).
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
-        current_user = await get_current_superuser_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            from sqlalchemy import select
-            stmt = select(User).offset(request_data.skip).limit(request_data.limit)
-            result = await session.execute(stmt)
-            users = result.scalars().all()
-            
-            return [UserResponse.from_orm(user) for user in users]
-        finally:
-            await commit_and_close_session(session)
-    
-    @router.post("/admin/users/activate")
+        """Return all users in the configuration (superuser only)."""
+        stmt = select(User).offset(skip).limit(limit)
+        result = await session.execute(stmt)
+        users = result.scalars().all()
+        return [UserResponse.model_validate(user) for user in users]
+
+    @router.post("/admin/users/{user_id}/activate")
     async def activate_user(
-        config_name: str,
-        request_data: AdminUserActionRequest
+        config: ConfigDep,
+        session: DbDep,
+        user_id: int,
+        current_user: CurrentSuperuser,
     ):
-        """
-        Activate user account (admin only).
-        
-        This endpoint allows superusers to activate user accounts.
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
+        """Activate a user account (superuser only)."""
+        auth_service = AuthService(config)
+        user = await auth_service.get_user_by_id(session, user_id)
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
+                detail="User not found",
             )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
-        auth_service = AuthService(config)
-        current_user = await get_current_superuser_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            user = await auth_service.get_user_by_id(session, request_data.user_id)
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            user.is_active = True
-            await session.commit()
-            
-            return {"message": f"User {user.username} activated successfully"}
-        finally:
-            await commit_and_close_session(session)
-    
-    @router.post("/admin/users/deactivate")
+        user.is_active = True
+        await session.commit()
+        return {"message": f"User {user.username} activated successfully"}
+
+    @router.post("/admin/users/{user_id}/deactivate")
     async def deactivate_user(
-        config_name: str,
-        request_data: AdminUserActionRequest
+        config: ConfigDep,
+        session: DbDep,
+        user_id: int,
+        current_user: CurrentSuperuser,
     ):
-        """
-        Deactivate user account (admin only).
-        
-        This endpoint allows superusers to deactivate user accounts.
-        """
-        try:
-            config = get_config(config_name)
-        except FileNotFoundError:
+        """Deactivate a user account (superuser only)."""
+        auth_service = AuthService(config)
+        user = await auth_service.get_user_by_id(session, user_id)
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{config_name}' not found"
+                detail="User not found",
             )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration '{config_name}': {str(e)}"
-            )
-        
-        auth_service = AuthService(config)
-        current_user = await get_current_superuser_from_token(config_name, request_data.token)
-        
-        session = await get_session_auto_cleanup(config_name, config)
-        try:
-            user = await auth_service.get_user_by_id(session, request_data.user_id)
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            user.is_active = False
-            await session.commit()
-            
-            return {"message": f"User {user.username} deactivated successfully"}
-        finally:
-            await commit_and_close_session(session)
-    
+        user.is_active = False
+        await session.commit()
+        return {"message": f"User {user.username} deactivated successfully"}
+
     return router

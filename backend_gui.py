@@ -266,7 +266,7 @@ class BrightBackendGUI:
             # Чтение вывода
             for line in iter(self.process.stdout.readline, ''):
                 if line:
-                    self.root.after(0, lambda l=line: self.log_message(l.strip()))
+                    self.root.after(0, lambda ln=line: self.log_message(ln.strip()))
             
         except Exception as e:
             self.log_message(f"❌ Ошибка запуска: {e}")
@@ -310,7 +310,7 @@ class BrightBackendGUI:
 
 def main():
     root = tk.Tk()
-    app = BrightBackendGUI(root)
+    BrightBackendGUI(root)
     root.mainloop()
 
 if __name__ == "__main__":

@@ -84,7 +84,7 @@ def create_config_router() -> APIRouter:
         """
         try:
             # Convert Pydantic model to dict
-            config_dict = config_data.dict()
+            config_dict = config_data.model_dump()
             
             # Generate config name from database name
             db_name = config_data.db.url.split("/")[-1].split("?")[0]
@@ -105,7 +105,7 @@ def create_config_router() -> APIRouter:
                 # If schema initialization fails, delete the config
                 try:
                     delete_config(config_name)
-                except:
+                except Exception:
                     pass
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -138,7 +138,7 @@ def create_config_router() -> APIRouter:
         """
         try:
             # Convert Pydantic model to dict
-            config_dict = config_data.dict()
+            config_dict = config_data.model_dump()
             
             # Create the configuration
             config = create_config(config_name, config_dict)
@@ -155,7 +155,7 @@ def create_config_router() -> APIRouter:
                 # If schema initialization fails, delete the config
                 try:
                     delete_config(config_name)
-                except:
+                except Exception:
                     pass
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -194,23 +194,23 @@ def create_config_router() -> APIRouter:
             
             # Convert current config to dict
             current_dict = {
-                "db": current_config.db.dict(),
-                "redis": current_config.redis.dict(),
-                "auth": current_config.auth.dict(),
-                "app": current_config.app.dict(),
-                "logging": current_config.logging.dict(),
-                "security": current_config.security.dict()
+                "db": current_config.db.model_dump(),
+                "redis": current_config.redis.model_dump(),
+                "auth": current_config.auth.model_dump(),
+                "app": current_config.app.model_dump(),
+                "logging": current_config.logging.model_dump(),
+                "security": current_config.security.model_dump()
             }
-            
+
             # Update with new data (only provided fields)
-            update_dict = config_data.dict(exclude_unset=True)
+            update_dict = config_data.model_dump(exclude_unset=True)
             for key, value in update_dict.items():
                 if value is not None:
-                    current_dict[key] = value.dict() if hasattr(value, 'dict') else value
+                    current_dict[key] = value.model_dump() if hasattr(value, 'model_dump') else value
             
             # Update the configuration
-            config = update_config(config_name, current_dict)
-            
+            update_config(config_name, current_dict)
+
             return ConfigResponse(
                 name=config_name,
                 config=ConfigCreate(**current_dict),

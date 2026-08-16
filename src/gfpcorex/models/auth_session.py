@@ -3,14 +3,18 @@ AuthSession model for GFP CoreX.
 Represents user authentication sessions and tokens.
 """
 
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from ..core.database import Base
+
+if TYPE_CHECKING:
+    # Imported only for typing the relationship; avoids a runtime circular import.
+    from .user import User
 
 
 class AuthSession(Base):
@@ -35,7 +39,12 @@ class AuthSession(Base):
         """Check if session is expired."""
         if self.expires_at is None:
             return False  # Perpetual token
-        return datetime.utcnow() > self.expires_at
+        # Backends such as SQLite return naive datetimes even for tz-aware columns;
+        # treat those as UTC so the comparison is always aware-vs-aware.
+        expires_at = self.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        return datetime.now(UTC) > expires_at
     
     @property
     def is_perpetual(self) -> bool:

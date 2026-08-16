@@ -22,8 +22,8 @@ pydantic-settings = "^2.2.1"
 pyyaml = "^6.0.1"
 python-multipart = "^0.0.9"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
-passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 bcrypt = "4.0.1"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 httpx = "^0.27.0"
 aiomysql = "^0.2.0"
 email-validator = "^2.2.0"
@@ -72,15 +72,24 @@ target-version = "py312"
 select = ["E", "F", "B", "I"]
 ignore = ["E501", "B904"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI intentionally uses these callables as argument defaults (dependency
+# injection). Exempt them from B008 (function-call-in-default) instead of
+# scattering per-line noqa across every route and dependency.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Security",
+]
+
 [tool.ruff.lint.per-file-ignores]
-# Tests: allow unused imports (fixtures, re-exports)
+# Tests re-import fixtures and config symbols consumed via pytest injection
+# rather than direct references, so unused-import is expected here.
 "tests/*" = ["F401"]
-# Legacy source files: allow pre-existing issues (F841=unused var, E722=bare except,
-# E712=boolean comparison, F821=forward refs, E741=ambiguous var)
-"src/gfpcorex/api/*" = ["F841", "E722", "F821"]
-"src/gfpcorex/models/*" = ["F821"]
-"src/gfpcorex/plugins/api.py" = ["F841"]
-"src/gfpcorex/plugins/manager.py" = ["E712"]
-"src/gfpcorex/main.py" = ["F841"]
-"backend_gui.py" = ["E741", "F841"]
 

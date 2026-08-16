@@ -17,7 +17,9 @@ redis:
 
 # Authentication
 auth:
-  secret_key: "your-secret-key-here-make-it-long-and-secure-32-chars-min"
+  # Loaded from $GFP_PROD_SECRET_KEY. No default: startup fails loudly if it is unset,
+  # so a real secret must be provided via the environment.
+  secret_key: "${GFP_PROD_SECRET_KEY}"
   algorithm: "HS256"
   access_token_expire_minutes: 30
   refresh_token_expire_days: 7
