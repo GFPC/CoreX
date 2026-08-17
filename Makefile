@@ -1,8 +1,9 @@
 # GFP CoreX — Developer Makefile
 # Run `make help` to see all available commands
 
-.PHONY: help install dev test test-cov lint format type-check pre-commit \
-        docker-up docker-down docker-scale docker-logs clean
+.PHONY: help install dev gui test test-cov lint format type-check pre-commit \
+        docker-up docker-down docker-scale docker-logs docker-build \
+        bench metrics clean
 
 # ─────────────────────────────────────────────
 #  Help
@@ -26,6 +27,9 @@ help:
 	@echo "  docker-down    Stop all containers"
 	@echo "  docker-scale   Start production scale (Nginx + 3×App + Prometheus + Grafana)"
 	@echo "  docker-logs    Tail logs from all containers"
+	@echo ""
+	@echo "  bench          Run k6 load test against the scale stack"
+	@echo "  metrics        Print a sample of live Prometheus metrics"
 	@echo ""
 	@echo "  clean          Remove .pyc files and caches"
 	@echo ""
@@ -98,6 +102,15 @@ docker-logs:
 
 docker-build:
 	docker build -t gfp-corex:latest .
+
+# ─────────────────────────────────────────────
+#  Load testing & observability
+# ─────────────────────────────────────────────
+bench:
+	k6 run bench/load-test.js
+
+metrics:
+	@curl -s http://localhost/metrics | head -n 40
 
 # ─────────────────────────────────────────────
 #  Cleanup

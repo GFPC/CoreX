@@ -7,13 +7,18 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import List, Tuple
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.config import create_config_router
 from .api.middleware import add_security_middleware
 from .core.config import get_available_configs, get_config
 from .core.database import close_database, init_database, ping_database
+from .core.metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    PrometheusMiddleware,
+    render_latest,
+)
 from .core.redis_manager import close_redis, init_redis, redis_manager
 from .utils.logging import GFPConsoleMessageStylizer
 
@@ -161,6 +166,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Added last → outermost layer, so it times the full request including CORS
+    # handling and rate-limit rejections. Feeds GET /metrics below.
+    app.add_middleware(PrometheusMiddleware)
+
     # Root endpoint
     @app.get("/")
     async def root():
@@ -172,6 +181,13 @@ def create_app() -> FastAPI:
             "docs": "/docs",
             "health": "/health"
         }
+
+    # Prometheus scrape endpoint (see core/metrics.py). Excluded from OpenAPI —
+    # it is infrastructure, not part of the public API contract.
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics():
+        """Expose collected metrics in Prometheus text exposition format."""
+        return Response(content=render_latest(), media_type=PROMETHEUS_CONTENT_TYPE)
 
     # Global health check
     @app.get("/health")

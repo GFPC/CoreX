@@ -47,4 +47,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "src.gfpcorex.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers + --forwarded-allow-ips let the app trust X-Forwarded-For from
+# the Nginx load balancer, so per-client rate limiting and metrics see the real
+# client IP instead of the load balancer's address.
+CMD ["uvicorn", "src.gfpcorex.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

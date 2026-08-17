@@ -20,7 +20,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-52%25-yellow)](./tests)
 [![Ruff](https://img.shields.io/badge/code_style-ruff-orange)](https://docs.astral.sh/ruff)
 [![License](https://img.shields.io/badge/license-MIT-informational)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-blueviolet)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-blueviolet)](CHANGELOG.md)
 
 </div>
 
@@ -47,7 +47,7 @@ graph TD
     Client -->|"HTTP REST"| LB
 
     subgraph Infra["☁️ Infrastructure Layer (docker-compose.scale.yml)"]
-        LB["🔁 Nginx Load Balancer<br/>Round-Robin / Least Conn"]
+        LB["🔁 Nginx Load Balancer<br/>Least Connections"]
         LB --> App1["⚡ CoreX Instance 1"]
         LB --> App2["⚡ CoreX Instance 2"]
         LB --> App3["⚡ CoreX Instance 3"]
@@ -115,7 +115,7 @@ graph TD
 
 ### 🔐 JWT Authentication
 - Per-tenant user databases with RBAC roles
-- `bcrypt` password hashing (passlib)
+- `bcrypt` password hashing (direct, cost-configurable)
 - Perpetual tokens for service-to-service communication
 - Session management with configurable auto-expiry
 
@@ -123,9 +123,10 @@ graph TD
 <td>
 
 ### 📦 Production Scale
-- Nginx → 3× CoreX → shared MySQL + Redis
-- Docker health checks + auto-restart policies
-- Prometheus metrics scraping + Grafana dashboards
+- Nginx (least-conn) → 3× CoreX → shared MySQL + Redis
+- Distributed rate limiting via a shared Redis counter
+- Live Prometheus metrics (`/metrics`) + auto-provisioned Grafana
+- k6 load test with p95 / error-rate budgets
 - Redis Sentinel for high availability
 
 </td>
@@ -289,7 +290,7 @@ docker compose down           # stop
 ```
               ┌──────────────────────────────┐
               │   Nginx Load Balancer :80    │
-              │   (round-robin, health check)│
+              │   (least_conn, health check)│
               └────────┬─────┬──────┬───────┘
                        │     │      │
              ┌─────────▼┐ ┌──▼────┐ ┌▼─────────┐
@@ -358,11 +359,13 @@ CoreX/
 │   ├── 📂 api/
 │   │   ├── auth.py               # Register, login, profile, admin
 │   │   ├── config.py             # Dynamic config CRUD
+│   │   ├── middleware.py         # Rate limit (Redis/in-mem) + body-size guard
 │   │   ├── plugins.py            # Plugin CRUD + reload
 │   │   └── plugin_integration.py # Plugin function execution
 │   ├── 📂 core/
 │   │   ├── config.py             # YAML loader + Pydantic v2 models + cache
 │   │   ├── database.py           # Async SQLAlchemy engine per tenant
+│   │   ├── metrics.py            # 📊 Prometheus exposition (stdlib-only)
 │   │   └── redis_manager.py      # Async Redis pool per tenant
 │   ├── 📂 plugins/
 │   │   ├── manager.py            # Load / hot-reload / exec lifecycle
@@ -375,9 +378,11 @@ CoreX/
 │
 ├── 📂 tests/
 │   ├── conftest.py               # Shared fixtures (Config, user data, plugin snippets)
-│   ├── test_sandbox.py           # 6 AST security test cases
-│   ├── test_config.py            # 4 ConfigManager test cases
-│   └── test_auth.py              # 4 JWT + password test cases
+│   ├── test_sandbox.py           # AST security test cases
+│   ├── test_config.py            # ConfigManager test cases
+│   ├── test_auth.py              # JWT + password test cases
+│   ├── test_metrics.py           # Prometheus exposition rendering
+│   └── test_rate_limit.py        # In-memory rate-limiter logic
 │
 ├── 📂 configs/
 │   ├── dev.yaml                  # Dev environment
@@ -386,10 +391,18 @@ CoreX/
 ├── 📂 .github/workflows/
 │   └── ci.yml                    # GitHub Actions: lint → test → docker build
 │
-├── 🐳 Dockerfile                 # Python 3.12-slim, non-root user, health check
+├── 📂 bench/
+│   ├── load-test.js              # k6 load test (p95 / error-rate thresholds)
+│   └── README.md                 # How to run + interpret benchmarks
+├── 📂 grafana/                   # Auto-provisioned datasource + RED dashboard
+│
+├── 🐳 Dockerfile                 # Python 3.12-slim, non-root, proxy-headers, health check
 ├── 🐳 docker-compose.yml         # Dev: App + MySQL + Redis
 ├── 🐳 docker-compose.scale.yml   # Prod: Nginx + 3× App + MySQL + Redis + Prometheus + Grafana
-├── 🔧 Makefile                   # Developer shortcuts (make test, make docker-up, ...)
+├── 🔧 nginx.scale.conf           # Load balancer (least-conn, gzip, failover)
+├── 🔧 prometheus.yml             # Scrape config for app1/app2/app3 /metrics
+├── 🔧 redis-sentinel.conf        # Redis Sentinel HA monitor
+├── 🔧 Makefile                   # Developer shortcuts (make test, make bench, ...)
 ├── 🔧 .pre-commit-config.yaml    # Pre-commit: ruff + yaml/toml checks
 ├── backend_gui.py                # Tkinter GUI launcher with live log streaming
 ├── pyproject.toml                # Poetry + Ruff + pytest + mypy config
@@ -488,12 +501,66 @@ CREATE TABLE auth_sessions (
 
 ---
 
+## 📊 Observability
+
+Every instance exposes Prometheus metrics at **`GET /metrics`** in the standard
+text exposition format — implemented with the **standard library alone** (see
+`src/gfpcorex/core/metrics.py`), so it adds zero dependencies.
+
+`PrometheusMiddleware` records the **RED** signals on every request:
+
+| Metric | Type | Labels |
+|---|---|---|
+| `gfp_http_requests_total` | counter | `method`, `path`, `status` |
+| `gfp_http_request_duration_seconds` | histogram | `method`, `path` (11 buckets) |
+| `gfp_http_requests_in_progress` | gauge | — |
+
+The `path` label uses the **matched route template** (e.g.
+`/api/c/{config_name}/api/v1/auth/login`) rather than the concrete URL, so
+per-tenant traffic collapses onto one low-cardinality series instead of exploding
+one series per tenant.
+
+In scale mode, **Prometheus** scrapes all three instances and **Grafana**
+auto-loads the *GFP CoreX — Overview* dashboard (datasource + panels provisioned
+from `grafana/`, no manual clicking):
+
+- Request rate **per instance** — watch Nginx spread load across `app1`/`app2`/`app3`
+- Latency **p50 / p95 / p99** (computed from the histogram)
+- **Error rate** (5xx) and requests by status class
+- **In-flight** requests per instance
+
+```bash
+make docker-scale       # brings up the full stack
+make metrics            # peek at raw metrics through the load balancer
+# → Grafana at http://localhost:3000  (admin / admin)
+```
+
+> Request-size and rate limits are configured via environment variables
+> (`GFP_MAX_REQUEST_BYTES`, `GFP_RATE_LIMIT_PER_MIN`, `GFP_RATE_LIMIT_REDIS_URL`),
+> since they apply globally across every tenant. In scale mode the app instances
+> share one Redis-backed rate-limit counter, so the limit holds across all three.
+
+### Load testing
+
+A [k6](https://k6.io) load test drives the scale stack and enforces a
+latency/error budget as **pass/fail thresholds** — usable as a CI performance gate:
+
+```bash
+make bench              # ramps to 200 VUs; fails if p95 > 500ms or error rate > 1%
+```
+
+See [`bench/README.md`](bench/README.md) for the traffic profile and thresholds.
+
+---
+
 ## 🛡️ Security Model
 
 | Layer | Mechanism |
 |---|---|
-| **Authentication** | JWT HS256 via `python-jose`, bcrypt rounds=12 via `passlib` |
+| **Authentication** | JWT HS256 via `python-jose`, bcrypt rounds=12 (direct `bcrypt`) |
 | **Authorization** | RBAC — `role_id` per user, enforced per-tenant |
+| **Rate limiting** | Per-client-IP, distributed via shared Redis (atomic Lua), in-memory fallback |
+| **Request size** | Body-size cap enforced before the handler (`413`), configured via env |
 | **Plugin execution** | Static AST analysis runs before every `exec()` call |
 | **Forbidden imports** | `os`, `sys`, `subprocess`, `socket`, `ctypes`, `threading`, `pickle`, `importlib` |
 | **Forbidden builtins** | `eval`, `exec`, `open`, `__import__`, `compile`, `breakpoint` |
@@ -512,7 +579,7 @@ CREATE TABLE auth_sessions (
 | **MySQL driver** | aiomysql | 0.2+ |
 | **PostgreSQL driver** | asyncpg | 0.29+ |
 | **Cache** | Redis + hiredis | 7+ |
-| **Auth** | python-jose + passlib[bcrypt] | latest |
+| **Auth** | python-jose (JWT) + bcrypt | latest |
 | **Config & Validation** | Pydantic v2 + PyYAML | 2.11+ |
 | **Packaging** | Poetry | 1.8+ |
 | **Testing** | pytest + pytest-asyncio + pytest-cov | 8+ |
@@ -523,6 +590,7 @@ CREATE TABLE auth_sessions (
 | **Containers** | Docker + docker-compose | 3.8+ |
 | **Load Balancer** | Nginx | alpine |
 | **Monitoring** | Prometheus + Grafana | latest |
+| **Load testing** | k6 | latest |
 | **GUI** | Tkinter | stdlib |
 
 ---
@@ -546,6 +614,9 @@ make docker-up     # Start dev environment (docker compose up -d)
 make docker-scale  # Start production scale environment
 make docker-down   # Stop all containers
 make docker-logs   # Tail container logs
+
+make bench         # Run k6 load test against the scale stack
+make metrics       # Sample live Prometheus metrics from the LB
 
 make clean         # Remove .pyc, __pycache__, .coverage
 ```

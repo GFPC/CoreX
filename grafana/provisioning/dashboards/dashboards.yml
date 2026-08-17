@@ -1,0 +1,15 @@
+apiVersion: 1
+
+# Loads every dashboard JSON under /var/lib/grafana/dashboards (mounted from
+# ./grafana/dashboards) on startup, so the CoreX overview is live immediately.
+providers:
+  - name: CoreX
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

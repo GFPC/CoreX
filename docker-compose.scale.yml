@@ -25,6 +25,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - CONFIG_NAME=prod
+      # Shared cross-instance rate-limit counter (see src/gfpcorex/api/middleware.py).
+      - GFP_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
     volumes:
       - ./configs:/app/configs:ro
     depends_on:
@@ -45,6 +47,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - CONFIG_NAME=prod
+      # Shared cross-instance rate-limit counter (see src/gfpcorex/api/middleware.py).
+      - GFP_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
     volumes:
       - ./configs:/app/configs:ro
     depends_on:
@@ -65,6 +69,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - CONFIG_NAME=prod
+      # Shared cross-instance rate-limit counter (see src/gfpcorex/api/middleware.py).
+      - GFP_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
     volumes:
       - ./configs:/app/configs:ro
     depends_on:
@@ -150,8 +156,13 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
     networks:
       - gfp_network
 

@@ -1,0 +1,16 @@
+apiVersion: 1
+
+# Auto-provisioned Prometheus datasource for the GFP CoreX scale stack.
+# A fixed uid ("prometheus") lets the bundled dashboard reference this datasource
+# without any manual click-through after `docker compose up`.
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s

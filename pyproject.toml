@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gfp-corex"
-version = "0.2.0"
+version = "0.3.0"
 description = "Production-ready multi-tenant FastAPI platform with dynamic plugin engine"
 authors = ["fealx15 <fealx15@gmail.com>"]
 readme = "README.md"

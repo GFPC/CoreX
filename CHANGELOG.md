@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] — 2026-08-17
+
+### Added
+- **Prometheus metrics** (`src/gfpcorex/core/metrics.py`) — a dependency-free
+  `GET /metrics` endpoint exposing the RED signals implemented with the standard
+  library alone: `gfp_http_requests_total` (counter), `gfp_http_request_duration_seconds`
+  (histogram), and `gfp_http_requests_in_progress` (gauge). `PrometheusMiddleware`
+  labels by matched route template to keep series cardinality low across tenants.
+- **Distributed rate limiting** (`src/gfpcorex/api/middleware.py`) — per-client-IP
+  fixed-window limiter backed by a shared Redis counter (atomic `INCR`+`EXPIRE`
+  Lua script) so one limit holds across every instance behind the load balancer,
+  with automatic fallback to an in-memory sliding window when Redis is unavailable.
+- **Request body-size guard** — `MaxBodySizeMiddleware` rejects oversized or invalid
+  `Content-Length` requests with `413`/`400` before the handler runs.
+- **Runnable scale stack** — added the config files `docker-compose.scale.yml`
+  mounts but previously lacked: `nginx.scale.conf` (least-conn LB, gzip, failover),
+  `prometheus.yml`, `redis-sentinel.conf`, and `scripts/init-mysql.sql`.
+- **Grafana auto-provisioning** (`grafana/`) — Prometheus datasource plus a
+  "GFP CoreX — Overview" dashboard (per-instance request rate, latency quantiles,
+  error rate, in-flight requests) loaded automatically on startup.
+- **k6 load test** (`bench/load-test.js`) — ramping-VU benchmark with pass/fail
+  thresholds (p95 < 500 ms, errors < 1%); `bench/README.md`; `make bench` / `make metrics`.
+- **Tests** — `tests/test_metrics.py` (exposition rendering) and
+  `tests/test_rate_limit.py` (in-memory limiter logic).
+
+### Changed
+- Password hashing now calls **bcrypt directly** (cost from `security.bcrypt_rounds`)
+  rather than through passlib, with consistent 72-byte truncation.
+- **CORS** no longer pairs a wildcard origin with credentials — browsers reject that
+  combination — so credentials are enabled only for explicit origins.
+- **Dockerfile** runs uvicorn with `--proxy-headers --forwarded-allow-ips=*`, so
+  per-client rate limiting and metrics observe the real client IP behind Nginx.
+- **Nginx** upstream uses `least_conn`, a better fit than round-robin when request
+  costs vary (cheap health checks vs. plugin execution).
+- **README** updated with honest observability, distributed rate-limiting, benchmark
+  and security sections, bcrypt-direct hashing, and a refreshed project structure.
+
+### Fixed
+- **SQL injection** in `plugins/api.py` — raw f-string queries replaced with
+  parameterized `sqlalchemy.text()` bindings.
+- **Event-loop blocking** in `plugins/api.py` — external HTTP calls migrated from
+  synchronous `requests` to `httpx.AsyncClient`, behind an HTTP method whitelist.
+- `docker compose -f docker-compose.scale.yml up` now starts cleanly; it previously
+  failed on the missing mounted config files listed above.
+
+---
+
 ## [0.2.0] — 2026-08-13
 
 ### Added

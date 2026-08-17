@@ -1,0 +1,22 @@
+# Prometheus scrape configuration for the GFP CoreX scale stack.
+# Each CoreX instance exposes /metrics (see src/gfpcorex/core/metrics.py);
+# Prometheus scrapes all three and aggregates across them.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: corex
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - app1:8000
+          - app2:8000
+          - app3:8000
+        labels:
+          service: gfp-corex
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

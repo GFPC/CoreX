@@ -6,7 +6,8 @@ Provides access to core system functions for plugins.
 import json
 from typing import Any, Dict, Optional
 
-import requests
+import httpx
+from sqlalchemy import text
 
 from ..core.config import get_config
 from ..core.database import commit_and_close_session, get_session_auto_cleanup
@@ -36,7 +37,8 @@ class PluginAPI:
             session = await get_session_auto_cleanup(self.config_name, self.config)
             try:
                 result = await session.execute(
-                    f"SELECT email, username FROM users WHERE id = {user_id}"
+                    text("SELECT email, username FROM users WHERE id = :user_id"),
+                    {"user_id": user_id},
                 )
                 user = result.fetchone()
                 
@@ -73,7 +75,11 @@ class PluginAPI:
             session = await get_session_auto_cleanup(self.config_name, self.config)
             try:
                 result = await session.execute(
-                    f"SELECT id, username, email, first_name, last_name, role_id FROM users WHERE id = {user_id}"
+                    text(
+                        "SELECT id, username, email, first_name, last_name, role_id "
+                        "FROM users WHERE id = :user_id"
+                    ),
+                    {"user_id": user_id},
                 )
                 user = result.fetchone()
                 
@@ -108,24 +114,31 @@ class PluginAPI:
             Dict or None: API response
         """
         try:
-            if method.upper() == "GET":
-                response = requests.get(url, headers=headers)
-            elif method.upper() == "POST":
-                response = requests.post(url, json=data, headers=headers)
-            elif method.upper() == "PUT":
-                response = requests.put(url, json=data, headers=headers)
-            elif method.upper() == "DELETE":
-                response = requests.delete(url, headers=headers)
-            else:
+            method = method.upper()
+            if method not in {"GET", "POST", "PUT", "DELETE"}:
                 print(f"❌ Unsupported HTTP method: {method}")
                 return None
-            
+
+            # Async, non-blocking HTTP so a slow upstream cannot stall the event
+            # loop — a sync `requests` call here would block every other request
+            # sharing this worker. The timeout bounds worst-case latency.
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.request(
+                    method,
+                    url,
+                    json=data if method in {"POST", "PUT"} else None,
+                    headers=headers,
+                )
+
+            content_type = response.headers.get("content-type", "")
             return {
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
-                "data": response.json() if response.headers.get('content-type', '').startswith('application/json') else response.text
+                "data": response.json()
+                if content_type.startswith("application/json")
+                else response.text,
             }
-            
+
         except Exception as e:
             print(f"❌ Error calling external API: {e}")
             return None
